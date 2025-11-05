@@ -1,11 +1,15 @@
 {
+  "version": "1.0.0",
   "domain": "glance_clock",
   "name": "Glance Clock",
-  "version": "4.0",
+  "codeowners": ["@PorlyBe"],
+  "dependencies": ["bluetooth", "bluetooth_adapters"],
+  "documentation": "https://github.com/PorlyBe/glance_clock_ha",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/PorlyBe/glance_clock_ha/issues",
   "requirements": ["bleak", "bleak-retry-connector", "protobuf"],
   "config_flow": true,
-  "dependencies": ["bluetooth", "bluetooth_adapters"],
-  "codeowners": [],
   "frontend": true,
   "bluetooth": [
     {
@@ -14,7 +18,7 @@
     },
     {
       "local_name": "Glance*",
-      "connectable": true  
+      "connectable": true
     }
   ]
 }

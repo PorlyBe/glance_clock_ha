@@ -35,7 +35,9 @@ Before setup, perform a complete factory reset on your Glance Clock. This ensure
 
 **To reset your Glance Clock:**
 
-- [Add specific reset instructions here - button combination, menu option, etc.]
+Hold the reset button + Power button. Let go of the reset button and keep holding the Power button until the LED blinking pattern changes. Then release it as well.
+
+NOTE: this will also reset the firmware back to the factory version.
 
 ### Step 2: Set Time and Update Firmware (nRF Connect)
 

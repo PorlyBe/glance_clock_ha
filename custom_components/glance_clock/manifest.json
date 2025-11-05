@@ -10,7 +10,6 @@
   "issue_tracker": "https://github.com/PorlyBe/glance_clock_ha/issues",
   "requirements": ["bleak", "bleak-retry-connector", "protobuf"],
   "config_flow": true,
-  "frontend": true,
   "bluetooth": [
     {
       "service_uuid": "5075f606-1e0e-11e7-93ae-92361f002671",

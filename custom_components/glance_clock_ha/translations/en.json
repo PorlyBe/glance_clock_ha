@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Glance Clock Setup",
+        "description": "Select your Glance Clock device to set up.",
+        "data": {
+          "address": "Device"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "Add Glance Clock",
+        "description": "Confirm adding {name} to Home Assistant."
+      }
+    },
+    "error": {
+      "no_devices_found": "No Glance Clock devices found. Make sure your device is powered on and in range.",
+      "device_not_found": "Selected device is no longer available.",
+      "cannot_connect": "Cannot connect to device. Check that the device is powered on and nearby.",
+      "not_supported": "This device is not supported.",
+      "unknown": "An unexpected error occurred during setup."
+    },
+    "abort": {
+      "already_configured": "This device is already configured",
+      "not_supported": "This device is not a supported Glance Clock",
+      "no_devices_found": "No Glance Clock devices found",
+      "device_not_found": "Device not found",
+      "cannot_connect": "Cannot connect to device",
+      "unknown": "Unknown error occurred"
+    }
+  }
+}

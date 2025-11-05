@@ -1,0 +1,207 @@
+update_display_settings:
+  name: "Update Display Settings"
+  description: "Update display settings on the Glance Clock"
+  fields:
+    nightModeEnabled:
+      name: "Night Mode Enabled"
+      description: "Enable automatic night mode"
+      default: true
+      selector:
+        boolean:
+    pointsAlwaysEnabled:
+      name: "Points Always Enabled"
+      description: "Always show time separator points"
+      default: false
+      selector:
+        boolean:
+    displayBrightness:
+      name: "Display Brightness"
+      description: "Screen brightness level (0-255, 0=auto). Note: Use the light entity for easier brightness control"
+      default: 128
+      selector:
+        number:
+          min: 0
+          max: 255
+          step: 1
+    timeModeEnable:
+      name: "Time Mode Enable"
+      description: "Enable time display on the clock"
+      default: true
+      selector:
+        boolean:
+    timeFormat12:
+      name: "12-Hour Format"
+      description: "Use 12-hour format instead of 24-hour"
+      default: false
+      selector:
+        boolean:
+    dateFormat:
+      name: "Date Format"
+      description: "Date display format (0=Disabled, 1=24 Jan, 2=24 Tue, 3=Jan 24, 4=Tue 24)"
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 4
+          step: 1
+
+send_notice:
+  name: "Send Notice"
+  description: "Send a notification notice to the Glance Clock"
+  fields:
+    text:
+      name: "Text"
+      description: "Message text to display"
+      required: true
+      selector:
+        text:
+    animation:
+      name: "Animation"
+      description: "Visual animation effect"
+      default: "pulse"
+      selector:
+        select:
+          options:
+            - label: "None"
+              value: "none"
+            - label: "Pulse"
+              value: "pulse"
+            - label: "Wave"
+              value: "wave"
+            - label: "Fire"
+              value: "fire"
+            - label: "Wheel"
+              value: "wheel"
+            - label: "Flower"
+              value: "flower"
+            - label: "Sun"
+              value: "sun"
+            - label: "Thunderstorm"
+              value: "thunderstorm"
+            - label: "Cloud"
+              value: "cloud"
+    sound:
+      name: "Sound"
+      description: "Notification sound"
+      default: "none"
+      selector:
+        select:
+          options:
+            - label: "None"
+              value: "none"
+            - label: "Waves"
+              value: "waves"
+            - label: "Rise"
+              value: "rise"
+            - label: "Bells"
+              value: "bells"
+            - label: "Radar"
+              value: "radar"
+            - label: "Hello"
+              value: "hello"
+            - label: "Complete"
+              value: "complete"
+    color:
+      name: "Color"
+      description: "Display color"
+      default: "white"
+      selector:
+        select:
+          options:
+            - label: "White"
+              value: "white"
+            - label: "Red"
+              value: "red"
+            - label: "Blue"
+              value: "blue"
+            - label: "Green (Lime)"
+              value: "lime"
+            - label: "Orange"
+              value: "dark_orange"
+            - label: "Purple"
+              value: "blue_violet"
+            - label: "Yellow"
+              value: "lawn_green"
+    priority:
+      name: "Priority"
+      description: "Notification priority level"
+      default: "medium"
+      selector:
+        select:
+          options:
+            - label: "Low"
+              value: "low"
+            - label: "Medium"
+              value: "medium"
+            - label: "High"
+              value: "high"
+            - label: "Critical"
+              value: "critical"
+    text_modifier:
+      name: "Text Effect"
+      description: "Text display effect"
+      default: "none"
+      selector:
+        select:
+          options:
+            - label: "None"
+              value: "none"
+            - label: "Repeat"
+              value: "repeat"
+            - label: "Rapid"
+              value: "rapid"
+            - label: "Delay"
+              value: "delay"
+
+read_current_settings:
+  name: "Read Current Settings"
+  description: "Read current settings from the Glance Clock device"
+
+refresh_entities:
+  name: "Refresh Entities"
+  description: "Refresh all entity states for the Glance Clock"
+
+send_forecast:
+  name: "Send Weather Forecast"
+  description: "Send 24-hour weather forecast data to the Glance Clock with color gradient support"
+  fields:
+    weather_entity:
+      name: "Weather Entity"
+      description: "The weather entity to get hourly forecast data from"
+      required: true
+      selector:
+        entity:
+          domain: weather
+    max_color:
+      name: "Maximum Temperature Color"
+      description: "Color for maximum temperature display"
+      default: "#FF0000"
+      selector:
+        color_rgb:
+    min_color:
+      name: "Minimum Temperature Color" 
+      description: "Color for minimum temperature display"
+      default: "#0000FF"
+      selector:
+        color_rgb:
+    min_value:
+      name: "Minimum Value Range"
+      description: "Temperature value for the minimum color (0-40°C range). If not set, uses actual forecast minimum."
+      selector:
+        number:
+          min: -50
+          max: 50
+          step: 1
+    max_value:
+      name: "Maximum Value Range"
+      description: "Temperature value for the maximum color (0-40°C range). If not set, uses actual forecast maximum."
+      selector:
+        number:
+          min: -50
+          max: 50
+          step: 1
+    template:
+      name: "Display Template"
+      description: "Optional display template data (advanced users). If not provided, uses default thermometer icon + value + °C"
+      selector:
+        text:

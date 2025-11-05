@@ -1,0 +1,20 @@
+{
+  "domain": "glance_clock",
+  "name": "Glance Clock",
+  "version": "4.0",
+  "requirements": ["bleak", "bleak-retry-connector", "protobuf"],
+  "config_flow": true,
+  "dependencies": ["bluetooth", "bluetooth_adapters"],
+  "codeowners": [],
+  "frontend": true,
+  "bluetooth": [
+    {
+      "service_uuid": "5075f606-1e0e-11e7-93ae-92361f002671",
+      "connectable": true
+    },
+    {
+      "local_name": "Glance*",
+      "connectable": true  
+    }
+  ]
+}

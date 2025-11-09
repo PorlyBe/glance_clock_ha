@@ -20,13 +20,15 @@ Home Assistant custom integration for Glance Clock devices via Bluetooth.
 
 <!-- [IMAGE: Screenshot of the integration in Home Assistant UI] -->
 
+
 ## Prerequisites
 
 ⚠️ **Important:** Before using this integration, you must:
 
+
 1. Reset your Glance Clock to factory settings
-2. Synchronize the time using nRF Connect
-3. Update the firmware (recommended)
+2. (Optional) Update the firmware
+3. Synchronize the time using the [bluetooth-cts Home Assistant add-on](https://github.com/PorlyBe/bluetooth-cts)
 4. Pair with your system's Bluetooth
 
 ### Step 1: Factory Reset Your Glance Clock
@@ -39,42 +41,44 @@ Hold the reset button + Power button. Let go of the reset button and keep holdin
 
 NOTE: this will also reset the firmware back to the factory version.
 
-### Step 2: Set Time and Update Firmware (nRF Connect)
 
-The Glance Clock requires time synchronization and may need a firmware update before use.
+
+### Step 2: (Optional) Update Firmware
+
+If you wish to update your Glance Clock's firmware, you can use the nRF Connect app to perform a Device Firmware Update (DFU):
 
 #### Download nRF Connect
 
 - **Android**: [nRF Connect on Google Play](https://play.google.com/store/apps/details?id=no.nordicsemi.android.mcp)
 - **iOS**: [nRF Connect on App Store](https://apps.apple.com/us/app/nrf-connect-for-mobile/id1054362403)
 
-#### Set the Time
+#### Update Firmware Steps
 
-1. Open nRF Connect app on your phone
-2. Go to the **Configure GATT server** tab (server icon)
-3. Tap **Add service**
-4. Select **Current Time Service (CTS)** - UUID: 0x1805
-5. Tap **OK** to add the service
-6. Go back to the **Scanner** tab
-7. Find your Glance Clock in the device list
-8. Tap **Connect**
-9. The clock should automatically read the time from your phone
-10. Once synchronized, disconnect from the clock
+1. Download the latest firmware from the [`/firmware`](firmware/) directory in this repository.
+2. Open the nRF Connect app on your phone.
+3. Go to the **Scanner** tab and find your Glance Clock in the device list.
+4. Tap **Connect** to connect to your Glance Clock.
+5. Tap the **DFU** icon (circular arrows) in the top right corner.
+6. Select **Distribution packet (ZIP)** when prompted.
+7. Browse and select the firmware ZIP file you downloaded.
+8. Tap **Start** to begin the update. Wait for the update to complete (do not disconnect). The clock will restart automatically when finished.
 
-#### Update Firmware (Optional but Recommended)
+For more details, see the [original instructions](https://github.com/Hypfer/glance-clock).
 
-1. Download the latest firmware from the [`/firmware`](firmware/) directory in this repository
-2. In nRF Connect, reconnect to your Glance Clock
-3. Tap the **DFU** icon (circular arrows) in the top right
-4. Select **Distribution packet (ZIP)**
-5. Browse and select the firmware ZIP file you downloaded
-6. Tap **Start** to begin the update
-7. Wait for the update to complete (do not disconnect)
-8. The clock will restart automatically when finished
+### Step 3: Add Bluetooth CTS Home Assistant Add-on
 
-### Step 3: Pair Your Glance Clock with Home Assistant
+The Glance Clock requires time synchronization before use. This can now be done easily using the [bluetooth-cts Home Assistant add-on](https://github.com/PorlyBe/bluetooth-cts), which provides a GATT Current Time Service (CTS) server for your clock to sync with.
 
-After resetting, setting time, and updating firmware, pair the clock with Home Assistant.
+**To set the time:**
+
+1. Install the [bluetooth-cts add-on](https://github.com/PorlyBe/bluetooth-cts) in Home Assistant (follow the instructions in that repository).
+2. Start the add-on so it advertises the Current Time Service (CTS) over Bluetooth.
+3. Once your Glance Clock is connected in the next step, the time will automatically sync.
+4. Leave the add-on running to keep your clock in sync with Home Assistant time.
+
+### Step 4: Pair Your Glance Clock with Home Assistant
+
+After resetting and setting the time, pair the clock with Home Assistant.
 
 Open a terminal in Home Assistant (Settings → System → Terminal) and run:
 

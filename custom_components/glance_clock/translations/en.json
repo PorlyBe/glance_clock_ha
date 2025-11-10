@@ -34,11 +34,9 @@
       "init": {
         "title": "Select Action",
         "description": "Choose an action to perform.",
-        "data": {
-          "action": "Action"
-        },
-        "data_description": {
-          "action": "Select the action you want to perform"
+        "menu_options": {
+          "calibration": "Start Calibration",
+          "clear_scenes": "Clear Scenes"
         }
       },
       "calibration": {
@@ -60,14 +58,6 @@
       "done_clear_scenes": {
         "title": "Scenes Cleared",
         "description": "All scenes have been cleared successfully. Click Finish to close this dialog."
-      }
-    },
-    "selector": {
-      "action": {
-        "options": {
-          "calibration": "Start Calibration",
-          "clear_scenes": "Clear Scenes"
-        }
       }
     }
   }

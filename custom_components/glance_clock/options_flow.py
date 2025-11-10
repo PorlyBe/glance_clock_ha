@@ -4,34 +4,23 @@ Options flow for Glance Clock integration.
 
 from __future__ import annotations
 
-from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from .const import DOMAIN
 
 
 class GlanceClockOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle options flow for Glance Clock."""
+    """Handle options flow for the integration."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+    def __init__(self, config_entry):
+        """Initialize options flow."""
         self.config_entry = config_entry
-        # Home Assistant instance is available as self.hass in OptionsFlow
 
     async def async_step_init(self, user_input=None):
-        """Manage the options - show action selection."""
-        if user_input is not None:
-            action = user_input.get("action")
-            if action == "calibration":
-                return await self.async_step_calibration()
-            elif action == "clear_scenes":
-                return await self.async_step_clear_scenes()
-
-        return self.async_show_form(
+        """Manage the options - show action menu."""
+        return self.async_show_menu(
             step_id="init",
-            data_schema=vol.Schema({
-                vol.Required("action"): vol.In(["calibration", "clear_scenes"])
-            }),
-            description_placeholders={},
+            menu_options=["calibration", "clear_scenes"]
         )
 
     async def async_step_calibration(self, user_input=None):

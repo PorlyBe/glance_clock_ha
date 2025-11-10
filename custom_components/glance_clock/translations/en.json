@@ -29,4 +29,22 @@
       "unknown": "Unknown error occurred"
     }
   }
+  ,
+  "options": {
+    "step": {
+      "calibration": {
+        "title": "Glance Clock Calibration",
+        "description": "{info}",
+        "data": {
+          "action": "Calibration Action"
+        },
+        "info": "To calibrate your Glance Clock: 1. Press Start Calibration. 2. Wait for the hands to move and stop at 11:59 with a green segment. 3. Remove the minute hand and place it back at 12:00, making both hands perfectly straight. 4. Press Confirm Calibration to finish. During calibration, the clock hands will move and stop at 11:59. If the hands do not align at 12:00 after confirming, repeat the process."
+      },
+      "done": {
+        "title": "Calibration Complete",
+        "description": "{done}",
+        "done": "Calibration complete! If the hands still do not align at 12:00, repeat the process."
+      }
+    }
+  }
 }

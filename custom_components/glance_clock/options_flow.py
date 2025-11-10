@@ -9,6 +9,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from .const import DOMAIN
 
+
 class GlanceClockOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for Glance Clock."""
 
@@ -16,54 +17,83 @@ class GlanceClockOptionsFlowHandler(config_entries.OptionsFlow):
         self.config_entry = config_entry
         # Home Assistant instance is available as self.hass in OptionsFlow
 
-
-    async def async_step_init(self, user_input: dict[str, Any] | None = None):
-        # Always start with calibration step
-        return await self.async_step_calibration(user_input)
-
-    async def async_step_calibration(self, user_input: dict[str, Any] | None = None):
+    async def async_step_init(self, user_input=None):
+        """Manage the options - show action selection."""
         if user_input is not None:
             action = user_input.get("action")
-            if action == "start":
-                await self._send_calibration_command(43)
-                return self.async_show_form(
-                    step_id="calibration",
-                    data_schema=vol.Schema({
-                        vol.Optional("action", default="confirm"): vol.In({"confirm": "Confirm Calibration"})
-                    }),
-                    description_placeholders={
-                        "info": ""
-                    },
-                )
-            elif action == "confirm":
-                await self._send_calibration_command(44)
-                return self.async_show_form(
-                    step_id="done",
-                    data_schema=vol.Schema({}),
-                    description_placeholders={
-                        "done": ""
-                    },
-                )
+            if action == "calibration":
+                return await self.async_step_calibration()
+            elif action == "clear_scenes":
+                return await self.async_step_clear_scenes()
 
-        # Initial calibration form
         return self.async_show_form(
-            step_id="calibration",
+            step_id="init",
             data_schema=vol.Schema({
-                vol.Optional("action", default="start"): vol.In({"start": "Start Calibration"})
+                vol.Required("action"): vol.In(["calibration", "clear_scenes"])
             }),
-            description_placeholders={
-                "info": ""
-            },
+            description_placeholders={},
         )
 
+    async def async_step_calibration(self, user_input=None):
+        """Start calibration process."""
+        if user_input is not None:
+            # Send dummy calibration command
+            await self._send_calibration_command(43)
+            return await self.async_step_confirm_calibration()
+
+        return self.async_show_form(
+            step_id="calibration",
+            data_schema=vol.Schema({}),
+            description_placeholders={},
+        )
+
+    async def async_step_confirm_calibration(self, user_input=None):
+        """Confirm calibration step."""
+        if user_input is not None:
+            await self._send_calibration_command(44)
+            return await self.async_step_done_calibration()
+
+        return self.async_show_form(
+            step_id="confirm_calibration",
+            data_schema=vol.Schema({}),
+            description_placeholders={},
+        )
+
+    async def async_step_done_calibration(self, user_input=None):
+        """Final step - show calibration completion."""
+        return self.async_create_entry(title="", data={})
+
+    async def async_step_clear_scenes(self, user_input=None):
+        """Clear scenes process."""
+        if user_input is not None:
+            # Send dummy clear scenes command
+            await self._send_clear_scenes_command()
+            return await self.async_step_done_clear_scenes()
+
+        return self.async_show_form(
+            step_id="clear_scenes",
+            data_schema=vol.Schema({}),
+            description_placeholders={},
+        )
+
+    async def async_step_done_clear_scenes(self, user_input=None):
+        """Final step - show clear scenes completion."""
+        return self.async_create_entry(title="", data={})
+
+    async def _send_clear_scenes_command(self):
+        """Send clear scenes command (dummy implementation)."""
+        # TODO: Replace with actual clear scenes command
+        # Example: await self.hass.async_add_executor_job(clear_scenes)
+        pass
+
     async def _send_calibration_command(self, command_byte: int):
-        # Get Home Assistant instance and config entry
         hass = self.hass
         entry_id = self.config_entry.entry_id
-        # Get notify service
         notify_service = hass.data.get(DOMAIN + "_notify", {}).get(entry_id)
         if notify_service and hasattr(notify_service, "_connection_manager"):
             await notify_service._connection_manager.send_command(bytes([command_byte]))
         else:
             import logging
-            logging.getLogger(__name__).warning("Could not send calibration command: notify service or connection manager missing.")
+            logging.getLogger(__name__).warning(
+                "Could not send calibration command: notify service or connection manager missing.")
+        pass

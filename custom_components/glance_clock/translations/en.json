@@ -28,22 +28,46 @@
       "cannot_connect": "Cannot connect to device",
       "unknown": "Unknown error occurred"
     }
-  }
-  ,
+  },
   "options": {
     "step": {
-      "calibration": {
-        "title": "Glance Clock Calibration",
-        "description": "{info}",
+      "init": {
+        "title": "Select Action",
+        "description": "Choose an action to perform.",
         "data": {
-          "action": "Calibration Action"
+          "action": "Action"
         },
-        "info": "To calibrate your Glance Clock: 1. Press Start Calibration. 2. Wait for the hands to move and stop at 11:59 with a green segment. 3. Remove the minute hand and place it back at 12:00, making both hands perfectly straight. 4. Press Confirm Calibration to finish. During calibration, the clock hands will move and stop at 11:59. If the hands do not align at 12:00 after confirming, repeat the process."
+        "data_description": {
+          "action": "Select the action you want to perform"
+        }
       },
-      "done": {
+      "calibration": {
+        "title": "Start Calibration",
+        "description": "This will start the calibration process. The watch hands will move to show their current alignment. If the hands stop at 11:59 instead of 12:00 when a green segment appears, this indicates the hands are mechanically misaligned and need adjustment."
+      },
+      "confirm_calibration": {
+        "title": "Adjust Watch Hands",
+        "description": "If the hands stopped at 11:59 (not aligned at 12:00), carefully remove the minute hand and reposition it to align straight at 12:00. This corrects the mechanical misalignment. Click Submit once you have adjusted the hands or if no adjustment was needed."
+      },
+      "done_calibration": {
         "title": "Calibration Complete",
-        "description": "{done}",
-        "done": "Calibration complete! If the hands still do not align at 12:00, repeat the process."
+        "description": "The calibration process is complete. Your watch hands should now be properly aligned at 12:00. Click Finish to close this dialog."
+      },
+      "clear_scenes": {
+        "title": "Clear Scenes",
+        "description": "Click Submit to clear all scenes. This action cannot be undone."
+      },
+      "done_clear_scenes": {
+        "title": "Scenes Cleared",
+        "description": "All scenes have been cleared successfully. Click Finish to close this dialog."
+      }
+    },
+    "selector": {
+      "action": {
+        "options": {
+          "calibration": "Start Calibration",
+          "clear_scenes": "Clear Scenes"
+        }
       }
     }
   }

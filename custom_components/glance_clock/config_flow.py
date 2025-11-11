@@ -16,12 +16,17 @@ from homeassistant.components.bluetooth import (
 )
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 
+
 from .const import DOMAIN
+from .options_flow import GlanceClockOptionsFlowHandler
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class GlanceClockConfigFlow(ConfigFlow, domain=DOMAIN):
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        return GlanceClockOptionsFlowHandler(config_entry)
     """Handle a config flow for Glance Clock."""
 
     VERSION = 1

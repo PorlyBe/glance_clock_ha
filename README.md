@@ -150,6 +150,13 @@ Once configured, the integration provides:
 - **Sensors** - Battery level percentage
 - **Notify** - Send notifications via `notify.glance_clock`
 
+
+## Using Icons in Notifications
+
+You can include icons in your Glance Clock notifications by inserting special codes in your message text. To add an icon, use `[icon:CODE]` in your message (for example: `Wake up! [icon:128]`).
+
+See the full list of available icon codes and their meanings in [ICONS.md](./ICONS.md).
+
 ## Services
 
 ### Send Notification

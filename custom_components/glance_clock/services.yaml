@@ -11,18 +11,49 @@ send_timer:
           min: 1
           max: 86400
           step: 1
-    intervals:
-      name: "Intervals (optional)"
-      description: "List of interval objects with text and duration. Each interval is an object: {text: string, duration: seconds, countdown: seconds}. Leave empty for a simple timer."
-      required: false
-      selector:
-        object:
     final_text:
       name: "Final Text (optional)"
       description: "Text or list of texts to display when the timer finishes. Supports [icon:CODE] syntax."
       required: false
       selector:
         text:
+    intervals:
+      name: "Intervals (optional)"
+      description: |
+        List of timer intervals. Each interval can have:
+          - text: string (supports [icon:CODE])
+          - duration: seconds (int)
+          - countdown: seconds (int, optional)
+        Leave empty for a simple timer.
+      required: false
+      selector:
+        object:
+          label_field: text
+          description_field: duration
+          multiple: true
+          fields:
+            text:
+              label: "Text"
+              description: "Text to display for this interval (supports [icon:CODE])"
+              selector:
+                text:
+            duration:
+              label: "Duration (seconds)"
+              description: "Duration of this interval in seconds."
+              selector:
+                number:
+                  min: 1
+                  max: 86400
+                  step: 1
+            countdown:
+              label: "Countdown (seconds, optional)"
+              description: "Countdown for this interval (optional)."
+              selector:
+                number:
+                  min: 0
+                  max: 86400
+                  step: 1
+
 update_display_settings:
   name: "Update Display Settings"
   description: "Update display settings on the Glance Clock"

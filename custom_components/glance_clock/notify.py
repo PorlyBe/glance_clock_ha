@@ -81,20 +81,36 @@ class GlanceClockNotificationService(BaseNotificationService):
 
     async def async_send_notice(self, text: str, animation: int = 1, sound: int = 0, 
                               color: int = 12, priority: int = 16, text_modifier: int = 0) -> bool:
-        """Send a notice to the Glance Clock device."""
+        """Send a notice to the Glance Clock device, supporting [icon:CODE] markers in text."""
         if not self._connection_manager or not self._connection_manager.is_connected:
             _LOGGER.warning("Device not connected, cannot send notice")
             return False
 
         try:
             from .glance_pb2 import Notice, TextData  # type: ignore
-            
+
+            def text_with_icons_to_bytes(text: str) -> bytes:
+                import re
+                icon_regex = re.compile(r"\[icon:(\d+)\]")
+                parts = []
+                last_index = 0
+                for match in icon_regex.finditer(text):
+                    # Add ASCII bytes for text before the icon
+                    for c in text[last_index:match.start()]:
+                        parts.append(ord(c) & 0x7F)
+                    # Add the icon byte
+                    parts.append(int(match.group(1)))
+                    last_index = match.end()
+                # Add remaining text
+                for c in text[last_index:]:
+                    parts.append(ord(c) & 0x7F)
+                return bytes(parts)
+
             # Create TextData for the notice
             text_data = TextData()
-            # Convert text to bytes (simplified - would need proper icon conversion for full compatibility)
-            text_data.text = text.encode('utf-8')
+            text_data.text = text_with_icons_to_bytes(text)
             text_data.modificators = text_modifier
-            
+
             # Create Notice protobuf message
             notice = Notice()
             notice.type = animation
@@ -102,27 +118,27 @@ class GlanceClockNotificationService(BaseNotificationService):
             notice.color = color
             # Notice expects a single TextData, not repeated
             notice.text.CopyFrom(text_data)
-            
+
             # Serialize the notice
             notice_bytes = notice.SerializeToString()
-            
+
             # Create command with header [2, priority, 0, 0] + notice data (matching web app)
             command = bytearray([2, priority, 0, 0])
             command.extend(notice_bytes)
-            
+
             _LOGGER.info(f"Sending notice: '{text}' (anim:{animation}, sound:{sound}, color:{color}, priority:{priority})")
             _LOGGER.debug(f"Notice command: {command.hex()}")
-            
+
             # Send the command
             success = await self._connection_manager.send_command(bytes(command))
-            
+
             if success:
                 _LOGGER.info("Notice sent successfully")
                 return True
             else:
                 _LOGGER.error("Failed to send notice command")
                 return False
-                
+
         except Exception as e:
             _LOGGER.error(f"Error sending notice: {e}")
             return False

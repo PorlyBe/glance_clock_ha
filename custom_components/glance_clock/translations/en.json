@@ -41,23 +41,18 @@
       },
       "calibration": {
         "title": "Start Calibration",
-        "description": "This will start the calibration process. The watch hands will move to show their current alignment. If the hands stop at 11:59 instead of 12:00 when a green segment appears, this indicates the hands are mechanically misaligned and need adjustment."
+        "description": "This will start the calibration process. The watch hands will move to show their current alignment. If the hands stop at 11:59 instead of 12:00 when a green segment appears, this indicates the hands are mechanically misaligned and need adjustment.",
+        "submit": "Start Calibration"
       },
       "confirm_calibration": {
-        "title": "Adjust Watch Hands",
-        "description": "If the hands stopped at 11:59 (not aligned at 12:00), carefully remove the minute hand and reposition it to align straight at 12:00. This corrects the mechanical misalignment. Click Submit once you have adjusted the hands or if no adjustment was needed."
-      },
-      "done_calibration": {
         "title": "Calibration Complete",
-        "description": "The calibration process is complete. Your watch hands should now be properly aligned at 12:00. Click Finish to close this dialog."
+        "description": "The calibration process is complete. If the hands stopped at 11:59 (not aligned at 12:00), carefully remove the minute hand and reposition it to align straight at 12:00. Your watch hands should now be properly aligned.",
+        "submit": "Finish"
       },
       "clear_scenes": {
         "title": "Clear Scenes",
-        "description": "Click Submit to clear all scenes. This action cannot be undone."
-      },
-      "done_clear_scenes": {
-        "title": "Scenes Cleared",
-        "description": "All scenes have been cleared successfully. Click Finish to close this dialog."
+        "description": "Click Submit to clear all scenes. This action cannot be undone.",
+        "submit": "Clear Scenes"
       }
     }
   }

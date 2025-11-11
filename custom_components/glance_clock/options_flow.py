@@ -34,23 +34,21 @@ class GlanceClockOptionsFlowHandler(config_entries.OptionsFlow):
             step_id="calibration",
             data_schema=vol.Schema({}),
             description_placeholders={},
+            last_step=False,
         )
 
     async def async_step_confirm_calibration(self, user_input=None):
         """Confirm calibration step."""
         if user_input is not None:
+            # Show completion message and finish
             await self._send_calibration_command(44)
-            return await self.async_step_done_calibration()
+            return self.async_create_entry(title="", data={})
 
         return self.async_show_form(
             step_id="confirm_calibration",
             data_schema=vol.Schema({}),
             description_placeholders={},
         )
-
-    async def async_step_done_calibration(self, user_input=None):
-        """Final step - show calibration completion."""
-        return self.async_create_entry(title="", data={})
 
     async def async_step_clear_scenes(self, user_input=None):
         """Clear scenes process."""
@@ -67,7 +65,15 @@ class GlanceClockOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_done_clear_scenes(self, user_input=None):
         """Final step - show clear scenes completion."""
-        return self.async_create_entry(title="", data={})
+        if user_input is not None:
+            return self.async_create_entry(title="", data={})
+
+        return self.async_show_form(
+            step_id="done_clear_scenes",
+            data_schema=vol.Schema({}),
+            description_placeholders={},
+            last_step=True,
+        )
 
     async def _send_clear_scenes_command(self):
         """Send clear scenes command (dummy implementation)."""

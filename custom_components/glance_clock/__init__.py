@@ -321,6 +321,32 @@ class GlanceClockConnectionManager:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
+
+    async def handle_send_timer(call):
+        """Handle sending a timer scene to the device."""
+        entry_data = hass.data[DOMAIN][entry.entry_id]
+        notify_service = hass.data.get(DOMAIN + "_notify", {}).get(entry.entry_id)
+        connection_manager = entry_data.get("connection_manager")
+
+        if notify_service:
+            if connection_manager and not hasattr(notify_service, '_connection_manager'):
+                notify_service._connection_manager = connection_manager
+
+            countdown = call.data.get("countdown")
+            intervals = call.data.get("intervals", [])
+            final_text = call.data.get("final_text", "")
+
+            success = await notify_service.async_send_timer(
+                countdown=countdown,
+                intervals=intervals,
+                final_text=final_text
+            )
+            if success:
+                _LOGGER.info(f"Timer sent successfully: {countdown}s")
+            else:
+                _LOGGER.error(f"Failed to send timer: {countdown}s")
+        else:
+            _LOGGER.error("Notification service not found for sending timer")
     """Set up Glance Clock integration."""
     hass.data.setdefault(DOMAIN, {})
 
@@ -799,6 +825,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.services.async_register(DOMAIN, "refresh_entities", handle_refresh_entities)
     hass.services.async_register(DOMAIN, "send_notice", handle_send_notice)
     hass.services.async_register(DOMAIN, "send_forecast", handle_send_forecast)
+    hass.services.async_register(DOMAIN, "send_timer", handle_send_timer)
 
     _LOGGER.info(f"Glance Clock integration setup complete for {name}")
     return True

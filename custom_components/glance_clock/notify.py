@@ -17,6 +17,89 @@ class CharacteristicMissingError(Exception):
 
 
 class GlanceClockNotificationService(BaseNotificationService):
+
+    async def async_send_timer(self, countdown, intervals=None, final_text=None) -> bool:
+        """Send a timer scene to the Glance Clock device."""
+        if not self._connection_manager or not self._connection_manager.is_connected:
+            _LOGGER.warning("Device not connected, cannot send timer")
+            return False
+
+        try:
+            from .glance_pb2 import Timer, TextData  # type: ignore
+            import struct
+            import time
+            import re
+
+            def text_with_icons_to_bytes(text: str) -> bytes:
+                icon_regex = re.compile(r"\[icon:(\d+)\]")
+                parts = []
+                last_index = 0
+                for match in icon_regex.finditer(text):
+                    for c in text[last_index:match.start()]:
+                        parts.append(ord(c) & 0x7F)
+                    parts.append(int(match.group(1)))
+                    last_index = match.end()
+                for c in text[last_index:]:
+                    parts.append(ord(c) & 0x7F)
+                return bytes(parts)
+
+            # Prepare intervals
+            timer_intervals = []
+            if intervals:
+                for interval in intervals:
+                    interval_text = interval.get('text', '')
+                    interval_duration = interval.get('duration', 0)
+                    interval_countdown = interval.get('countdown', 0)
+                    text_data = TextData()
+                    text_data.text = text_with_icons_to_bytes(interval_text)
+                    timer_intervals.append({
+                        'text': [text_data],
+                        'duration': interval_duration,
+                        'countdown': interval_countdown
+                    })
+
+            # Prepare final text
+            final_texts = []
+            if final_text:
+                if isinstance(final_text, list):
+                    for t in final_text:
+                        text_data = TextData()
+                        text_data.text = text_with_icons_to_bytes(t)
+                        final_texts.append(text_data)
+                else:
+                    text_data = TextData()
+                    text_data.text = text_with_icons_to_bytes(final_text)
+                    final_texts.append(text_data)
+
+            # Create Timer protobuf message
+            timer_msg = Timer()
+            timer_msg.countdown = int(countdown)
+            for interval in timer_intervals:
+                i = timer_msg.intervals.add()
+                i.duration = int(interval['duration'])
+                i.countdown = int(interval['countdown'])
+                for t in interval['text']:
+                    i.text.append(t)
+            for t in final_texts:
+                timer_msg.finalText.append(t)
+
+            timer_bytes = timer_msg.SerializeToString()
+            header = bytearray([3, 0, 0, 0])
+            command = header + timer_bytes
+
+            _LOGGER.info(f"Sending timer: countdown={countdown}, intervals={len(timer_intervals)}, final_texts={len(final_texts)}")
+            _LOGGER.debug(f"Timer command: {command.hex()}")
+
+            success = await self._connection_manager.send_command(bytes(command))
+            if success:
+                _LOGGER.info("Timer sent successfully")
+                return True
+            else:
+                _LOGGER.error("Failed to send timer command")
+                return False
+        except Exception as e:
+            _LOGGER.error(f"Error sending timer: {e}")
+            return False
     """Notification service for the Glance Clock - focused on settings reading."""
 
     def __init__(self, config_data):

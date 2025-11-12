@@ -4,16 +4,16 @@ send_timer:
   fields:
     countdown:
       name: "Countdown (seconds)"
-      description: "Timer duration in seconds."
-      required: true
+      description: "Time before timer starts."
+      required: false
       selector:
         number:
-          min: 1
+          min: 0
           max: 86400
           step: 1
     final_text:
       name: "Final Text (optional)"
-      description: "Text or list of texts to display when the timer finishes. Supports [icon:CODE] syntax."
+      description: "Text to display when the timer finishes. Supports [icon:CODE] syntax."
       required: false
       selector:
         text:
@@ -25,7 +25,7 @@ send_timer:
           - duration: seconds (int)
           - countdown: seconds (int, optional)
         Leave empty for a simple timer.
-      required: false
+      required: true
       selector:
         object:
           label_field: text

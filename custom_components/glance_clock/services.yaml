@@ -1,3 +1,56 @@
+send_timer:
+  name: "Send Timer"
+  description: "Send a timer scene to the Glance Clock. The timer will run on the device."
+  fields:
+    countdown:
+      name: "Countdown (seconds)"
+      description: "Time before timer starts."
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 86400
+          step: 1
+    final_text:
+      name: "Final Text (optional)"
+      description: "Text to display when the timer finishes. Supports [icon:CODE] syntax."
+      required: false
+      selector:
+        text:
+    intervals:
+      name: "Intervals (optional)"
+      description: |
+        List of timer intervals. Each interval can have:
+          - text: string (supports [icon:CODE])
+          - duration: seconds (int)
+          - countdown: seconds (int, optional)
+        Leave empty for a simple timer.
+      required: true
+      selector:
+        object:
+          label_field: text
+          description_field: duration
+          multiple: true
+          fields:
+            text:
+              label: "Text"
+              selector:
+                text:
+            duration:
+              label: "Duration (seconds)"
+              selector:
+                number:
+                  min: 1
+                  max: 86400
+                  step: 1
+            countdown:
+              label: "Countdown (seconds, optional)"
+              selector:
+                number:
+                  min: 0
+                  max: 86400
+                  step: 1
+
 update_display_settings:
   name: "Update Display Settings"
   description: "Update display settings on the Glance Clock"
@@ -53,7 +106,7 @@ send_notice:
       name: "Text"
       description: |
         Message text to display. To insert an icon, use [icon:CODE] in your message (e.g., "Wake up! [icon:123]").
-        
+
         See the full list of available icons: https://github.com/PorlyBe/glance_clock_ha/blob/master/ICONS.md
       required: true
       selector:
@@ -182,7 +235,7 @@ send_forecast:
       selector:
         color_rgb:
     min_color:
-      name: "Minimum Temperature Color" 
+      name: "Minimum Temperature Color"
       description: "Color for minimum temperature display"
       default: "#0000FF"
       selector:

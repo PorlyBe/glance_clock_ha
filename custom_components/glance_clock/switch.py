@@ -7,7 +7,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from .const import DOMAIN, GLANCE_SERVICE_UUID, GLANCE_CHARACTERISTIC_UUID
+from .const import DOMAIN
 from .entity import GlanceClockEntity
 
 _LOGGER = logging.getLogger(__name__)

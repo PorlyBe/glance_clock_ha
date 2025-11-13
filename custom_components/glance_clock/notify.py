@@ -4,7 +4,6 @@ from homeassistant.components.notify.legacy import BaseNotificationService
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from .const import DOMAIN, GLANCE_SERVICE_UUID, SETTINGS_CHARACTERISTIC_UUID
-from bleak.backends.service import BleakGATTServiceCollection
 from bleak_retry_connector import BleakClientWithServiceCache
 from .glance_pb2 import Settings, ForecastScene  # type: ignore
 

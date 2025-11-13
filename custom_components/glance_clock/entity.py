@@ -1,6 +1,5 @@
 """Base entity for Glance Clock devices."""
 import logging
-import asyncio
 from datetime import datetime, timedelta
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.device_registry import DeviceInfo

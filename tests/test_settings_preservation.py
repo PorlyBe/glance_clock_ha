@@ -89,3 +89,40 @@ def test_rebuilding_from_named_fields_loses_data() -> None:
     assert 1 not in present, "DND schedule survived a rebuild -- test is wrong"
     assert 15 not in present, "undocumented field survived -- test is wrong"
     assert 13 in present, "field 13 was not invented -- test is wrong"
+
+
+def test_dnd_window_can_be_changed_without_touching_anything_else() -> None:
+    settings = Settings()
+    settings.ParseFromString(REAL_SETTINGS)
+    settings.dnd.fromHour = 22
+    settings.dnd.tillHour = 6
+
+    written = settings.SerializeToString()
+    assert field_numbers(written) == field_numbers(REAL_SETTINGS)
+
+    reread = Settings()
+    reread.ParseFromString(written)
+    assert (reread.dnd.fromHour, reread.dnd.tillHour) == (22, 6)
+    assert reread.dnd.recurring is True
+    assert reread.permanentMute is True  # untouched
+
+
+def test_creating_a_dnd_window_on_a_device_without_one() -> None:
+    """All three DND fields are required, so a partial submessage must not ship."""
+    bare = Settings()
+    bare.nightModeEnabled = True
+    bare.pointsAlwaysEnabled = True
+    bare.displayBrightness = 0
+    bare.timeModeEnable = True
+    bare.timeFormat12 = False
+    bare.dateFormat = 0
+    assert not bare.HasField("dnd")
+
+    # Mirrors the gap-filling in async_write_settings.
+    bare.dnd.recurring = True
+    bare.dnd.fromHour = 23
+    bare.dnd.tillHour = 6
+
+    reread = Settings()
+    reread.ParseFromString(bare.SerializeToString())
+    assert (reread.dnd.fromHour, reread.dnd.tillHour) == (23, 6)

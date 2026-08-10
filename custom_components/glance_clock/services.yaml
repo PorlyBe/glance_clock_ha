@@ -261,3 +261,40 @@ send_forecast:
       description: "Optional display template data (advanced users). If not provided, uses default thermometer icon + value + °C"
       selector:
         text:
+
+set_dnd_schedule:
+  name: Set DND schedule
+  description: >-
+    Set the recurring Do Not Disturb window stored on the clock. This is the
+    schedule the clock applies itself, separate from the permanent DND flag.
+  fields:
+    from_hour:
+      name: From hour
+      description: Hour the quiet period starts, 0-23.
+      example: 21
+      selector:
+        number:
+          min: 0
+          max: 23
+          mode: box
+    till_hour:
+      name: Till hour
+      description: Hour the quiet period ends, 0-23. May be earlier than the start to span midnight.
+      example: 7
+      selector:
+        number:
+          min: 0
+          max: 23
+          mode: box
+    recurring:
+      name: Recurring
+      description: Whether the window repeats every day.
+      default: true
+      selector:
+        boolean:
+
+read_dnd_schedule:
+  name: Read DND schedule
+  description: >-
+    Read the Do Not Disturb window currently stored on the clock and write it
+    to the Home Assistant log.

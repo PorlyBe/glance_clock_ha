@@ -120,3 +120,11 @@ SETTINGS_FIELD_NAMES = (
 # Key under which the device's raw Settings bytes are cached alongside the
 # decoded values, so a write can patch them instead of rebuilding the message.
 RAW_SETTINGS_KEY = "_raw_settings"
+
+# The scheduled Do-Not-Disturb window lives in a nested submessage, so these
+# cannot be set with a plain setattr on the Settings message.
+DND_FIELD_NAMES = {
+    "dndRecurring": "recurring",
+    "dndFromHour": "fromHour",
+    "dndTillHour": "tillHour",
+}

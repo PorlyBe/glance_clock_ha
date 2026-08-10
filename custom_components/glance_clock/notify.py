@@ -3,7 +3,7 @@ import asyncio
 from homeassistant.components.notify.legacy import BaseNotificationService
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from .const import (DOMAIN, GLANCE_SERVICE_UUID, RAW_SETTINGS_KEY,
+from .const import (DND_FIELD_NAMES, DOMAIN, GLANCE_SERVICE_UUID, RAW_SETTINGS_KEY,
                     SETTINGS_CHARACTERISTIC_UUID, SETTINGS_FIELD_NAMES)
 from bleak_retry_connector import BleakClientWithServiceCache
 from .glance_pb2 import Settings, ForecastScene  # type: ignore
@@ -322,6 +322,12 @@ class GlanceClockNotificationService(BaseNotificationService):
                 "permanentMute": settings.permanentMute,
                 "dateFormat": settings.dateFormat,
                 "mgrUserActivityTimeout": settings.mgrUserActivityTimeout,
+                # The scheduled Do-Not-Disturb window, if the device has one.
+                # None means no schedule is stored at all, which is different
+                # from a schedule of 00:00-00:00.
+                "dndRecurring": settings.dnd.recurring if settings.HasField("dnd") else None,
+                "dndFromHour": settings.dnd.fromHour if settings.HasField("dnd") else None,
+                "dndTillHour": settings.dnd.tillHour if settings.HasField("dnd") else None,
                 # Keep the device's own bytes. A settings write has to send the
                 # whole message, and real hardware carries fields this schema
                 # does not model -- a nested DND schedule, and at least one
@@ -462,11 +468,29 @@ class GlanceClockNotificationService(BaseNotificationService):
                         setattr(settings, key, current_settings[key])
 
             # Apply only what the caller asked to change.
+            dnd_changes = {
+                DND_FIELD_NAMES[key]: value
+                for key, value in settings_data.items()
+                if key in DND_FIELD_NAMES
+            }
             for key, value in settings_data.items():
+                if key in DND_FIELD_NAMES:
+                    continue
                 if key not in SETTINGS_FIELD_NAMES:
                     _LOGGER.warning("Ignoring unknown setting %s", key)
                     continue
                 setattr(settings, key, value)
+
+            if dnd_changes:
+                # All three DND fields are `required` in the schema, so a
+                # partially populated submessage will not serialise. When the
+                # device has no schedule yet, fill the gaps rather than fail.
+                if not settings.HasField("dnd"):
+                    dnd_changes.setdefault("recurring", True)
+                    dnd_changes.setdefault("fromHour", 0)
+                    dnd_changes.setdefault("tillHour", 0)
+                for field, value in dnd_changes.items():
+                    setattr(settings.dnd, field, value)
 
             # Serialize the settings
             settings_bytes = settings.SerializeToString()

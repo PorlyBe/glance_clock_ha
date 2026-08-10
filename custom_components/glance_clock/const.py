@@ -101,3 +101,22 @@ TEXT_MODIFIERS = {
     "rapid": 2,
     "delay": 3,
 }
+
+# Settings fields this integration knows how to read and write. Anything the
+# device reports outside this list -- the nested DND schedule, undocumented
+# fields -- must be carried through untouched rather than rebuilt.
+SETTINGS_FIELD_NAMES = (
+    "nightModeEnabled",
+    "pointsAlwaysEnabled",
+    "displayBrightness",
+    "timeModeEnable",
+    "timeFormat12",
+    "permanentDND",
+    "permanentMute",
+    "dateFormat",
+    "mgrUserActivityTimeout",
+)
+
+# Key under which the device's raw Settings bytes are cached alongside the
+# decoded values, so a write can patch them instead of rebuilding the message.
+RAW_SETTINGS_KEY = "_raw_settings"

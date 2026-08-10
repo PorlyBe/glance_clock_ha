@@ -3,7 +3,8 @@ import asyncio
 from homeassistant.components.notify.legacy import BaseNotificationService
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from .const import DOMAIN, GLANCE_SERVICE_UUID, SETTINGS_CHARACTERISTIC_UUID
+from .const import (DOMAIN, GLANCE_SERVICE_UUID, RAW_SETTINGS_KEY,
+                    SETTINGS_CHARACTERISTIC_UUID, SETTINGS_FIELD_NAMES)
 from bleak_retry_connector import BleakClientWithServiceCache
 from .glance_pb2 import Settings, ForecastScene  # type: ignore
 
@@ -321,6 +322,12 @@ class GlanceClockNotificationService(BaseNotificationService):
                 "permanentMute": settings.permanentMute,
                 "dateFormat": settings.dateFormat,
                 "mgrUserActivityTimeout": settings.mgrUserActivityTimeout,
+                # Keep the device's own bytes. A settings write has to send the
+                # whole message, and real hardware carries fields this schema
+                # does not model -- a nested DND schedule, and at least one
+                # undocumented field. Writing a message rebuilt from the keys
+                # above silently deletes them. See async_write_settings.
+                RAW_SETTINGS_KEY: bytes(protobuf_data),
             }
 
             _LOGGER.debug("Successfully read settings from device")
@@ -424,27 +431,42 @@ class GlanceClockNotificationService(BaseNotificationService):
                     "permanentDND": False,
                     "permanentMute": False,
                     "dateFormat": 0,
-                    "mgrUserActivityTimeout": 600,
+                    # mgrUserActivityTimeout is deliberately absent. Devices
+                    # that do not report it use a firmware default; writing an
+                    # explicit value here has been observed to stop the rim
+                    # points staying lit.
                 }
                 _LOGGER.debug("Using default settings as base")
 
-            # Update only the specified settings
-            updated_settings = current_settings.copy()
-            updated_settings.update(settings_data)
-
-            # Create protobuf Settings message
             settings = Settings()
-            
-            # Map the dictionary to protobuf fields
-            settings.nightModeEnabled = updated_settings.get("nightModeEnabled", True)
-            settings.pointsAlwaysEnabled = updated_settings.get("pointsAlwaysEnabled", False)
-            settings.displayBrightness = updated_settings.get("displayBrightness", 128)
-            settings.timeModeEnable = updated_settings.get("timeModeEnable", True)
-            settings.timeFormat12 = updated_settings.get("timeFormat12", False)
-            settings.permanentDND = updated_settings.get("permanentDND", False)
-            settings.permanentMute = updated_settings.get("permanentMute", False)
-            settings.dateFormat = updated_settings.get("dateFormat", 0)
-            settings.mgrUserActivityTimeout = updated_settings.get("mgrUserActivityTimeout", 600)
+
+            raw_settings = current_settings.get(RAW_SETTINGS_KEY)
+            if raw_settings:
+                # Start from the device's own message rather than a blank one.
+                # Parsing preserves every field it contains, including the
+                # nested DND schedule and any field this schema does not know
+                # about, and re-serialising is byte-identical when nothing is
+                # changed. Building a fresh Settings() instead would drop them.
+                settings.ParseFromString(raw_settings)
+            else:
+                # No successful read to build on. Fall back to the previous
+                # behaviour, but only for the fields we actually have values
+                # for -- writing defaults for the rest is what corrupted
+                # devices before.
+                _LOGGER.warning(
+                    "Writing settings without a prior read; fields not modelled "
+                    "by this integration cannot be preserved"
+                )
+                for key in SETTINGS_FIELD_NAMES:
+                    if key in current_settings:
+                        setattr(settings, key, current_settings[key])
+
+            # Apply only what the caller asked to change.
+            for key, value in settings_data.items():
+                if key not in SETTINGS_FIELD_NAMES:
+                    _LOGGER.warning("Ignoring unknown setting %s", key)
+                    continue
+                setattr(settings, key, value)
 
             # Serialize the settings
             settings_bytes = settings.SerializeToString()

@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from ..const import DOMAIN
 from ..utils.led_utils import (
     ANIMATION_SWEEP,
+    DISPLAY_MODES,
     GIF_LENGTH_MULTIPLE,
     PIXELS_PER_RING,
     check_speed,
@@ -72,6 +73,15 @@ async def handle_set_scene(hass: HomeAssistant, entry: ConfigEntry, call: Servic
     except (ValueError, TypeError) as err:
         _LOGGER.error("set_scene: %s", err)
         return
+
+    if mode == DISPLAY_MODES["watchface"] and any(s["type"] == "text" for s in steps):
+        # The digital clockface owns the matrix in this mode, so the text has
+        # nowhere to go and simply never appears. Silence here looks like a
+        # broken service.
+        _LOGGER.warning(
+            "set_scene: text steps do not render in 'watchface' mode, because the "
+            "digital clockface occupies the matrix. Use mode 'exclusive' for text."
+        )
 
     await notify_service.async_send_scene(
         steps,

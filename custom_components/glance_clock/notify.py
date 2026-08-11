@@ -11,23 +11,50 @@ from .glance_pb2 import Settings, ForecastScene  # type: ignore
 _LOGGER = logging.getLogger(__name__)
 
 
-def text_with_icons_to_bytes(text: str) -> bytes:
-    """Encode display text, expanding [icon:CODE] markers.
+#: The matrix font is ASCII only. Masking a character to 7 bits turns the ones
+#: people actually type into different letters -- 'a' becomes 'e', so "Hej da"
+#: arrives as "Hej de". Mapping them to their closest ASCII form is wrong too,
+#: but it is legible and predictable.
+TRANSLITERATION = {
+    "å": "a", "ä": "a", "ö": "o",
+    "Å": "A", "Ä": "A", "Ö": "O",
+    "é": "e", "è": "e", "ê": "e", "É": "E",
+    "ü": "u", "Ü": "U", "ø": "o", "Ø": "O",
+    "æ": "ae", "Æ": "AE", "ß": "ss",
+    "–": "-", "—": "-", "‘": "'", "’": "'",
+    "“": '"', "”": '"', "…": "...",
+}
 
-    The matrix font is a single byte per glyph, so ASCII is masked to 7 bits and
-    icons are inserted as their raw charcode.
+#: Charcode 154 is the font's own "missing character" glyph.
+MISSING_GLYPH = 154
+
+
+def _encode_char(char: str) -> list:
+    """Turn one character into display bytes.
+
+    Anything that cannot be represented becomes the font's missing-character
+    glyph, so a dropped letter is visible rather than silently changed.
     """
+    out = []
+    for replacement in TRANSLITERATION.get(char, char):
+        code = ord(replacement)
+        out.append(code if code < 128 else MISSING_GLYPH)
+    return out
+
+
+def text_with_icons_to_bytes(text: str) -> bytes:
+    """Encode display text, expanding [icon:CODE] markers."""
     import re
 
     parts = []
     last_index = 0
     for match in re.finditer(r"\[icon:(\d+)\]", text):
         for char in text[last_index:match.start()]:
-            parts.append(ord(char) & 0x7F)
+            parts.extend(_encode_char(char))
         parts.append(int(match.group(1)) & 0xFF)
         last_index = match.end()
     for char in text[last_index:]:
-        parts.append(ord(char) & 0x7F)
+        parts.extend(_encode_char(char))
     return bytes(parts)
 
 

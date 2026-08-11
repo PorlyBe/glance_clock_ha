@@ -300,3 +300,21 @@ def test_unknown_effect_and_condition_names_are_rejected() -> None:
                                   "segments": [{"start": 0, "color": "red"}]}])
     with pytest.raises(ValueError, match="unknown weather condition"):
         scene_steps_from_config([{"type": "weather", "condition": "hail"}])
+
+
+def test_swedish_characters_survive_the_matrix_font() -> None:
+    """Masking to 7 bits turns 'a-ring' into 'e', so "Hej da" arrived as "Hej de"."""
+    import re as _re
+
+    src = (_COMPONENT / "notify.py").read_text(encoding="utf-8")
+    start = src.index("#: The matrix font is ASCII only")
+    ns: dict = {}
+    exec(src[start : src.index("def _resolve_sound")], ns)
+    encode = ns["text_with_icons_to_bytes"]
+
+    assert encode("Hej d\u00e5") == b"Hej da"
+    assert encode("\u00c4ndra l\u00f6st") == b"Andra lost"
+    assert encode("21[icon:176]C") == bytes([50, 49, 176, 67])
+    # Anything unmappable becomes the font's missing-character glyph, so a lost
+    # letter is visible instead of silently becoming a different one.
+    assert encode("\u65e5") == bytes([154])

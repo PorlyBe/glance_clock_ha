@@ -29,6 +29,7 @@ async def async_setup_entry(
         GlanceClockTimePointsSwitch(config_entry, mac_address, name, connection_manager),
         GlanceClockTimeModeSwitch(config_entry, mac_address, name, connection_manager),
         GlanceClockTimeFormatSwitch(config_entry, mac_address, name, connection_manager),
+        GlanceClockMuteSwitch(config_entry, mac_address, name, connection_manager),
     ]
 
     async_add_entities(entities)
@@ -485,3 +486,92 @@ class GlanceClockTimeFormatSwitch(GlanceClockEntity, SwitchEntity):
         if self._connection_manager:
             self._connection_manager.remove_connection_callback(self._on_connection_established)
         await super().async_will_remove_from_hass()
+
+class GlanceClockSettingSwitch(GlanceClockEntity, SwitchEntity):
+    """A switch bound to one boolean field of the device's settings."""
+
+    _setting_key: str
+
+    def __init__(self, config_entry, mac_address, device_name, connection_manager):
+        """Initialize the setting switch."""
+        super().__init__(config_entry, mac_address, device_name, connection_manager)
+        self._is_on = None
+        self._available = False
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return the current value."""
+        return self._is_on
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self._available and self._connection_manager.is_connected
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable the setting."""
+        await self._apply(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable the setting."""
+        await self._apply(False)
+
+    async def _apply(self, value: bool) -> None:
+        if await self._write_settings({self._setting_key: value}):
+            self._is_on = value
+            self.async_write_ha_state()
+        else:
+            _LOGGER.error("Failed to set %s", self.name)
+
+    async def async_added_to_hass(self) -> None:
+        """When entity is added to hass."""
+        await super().async_added_to_hass()
+        if self._connection_manager:
+            self._connection_manager.add_connection_callback(self._on_connection_established)
+        await self._update_initial_state()
+
+    async def _on_connection_established(self) -> None:
+        """Read state as soon as there is a connection."""
+        await self.async_update()
+        self.async_write_ha_state()
+
+    async def _update_initial_state(self) -> None:
+        """Read the initial state without blocking startup."""
+        try:
+            if not self._connection_manager.is_connected:
+                await asyncio.sleep(2)
+            await self.async_update()
+            self.async_write_ha_state()
+        except Exception as e:
+            _LOGGER.debug("Could not read initial state for %s: %s", self.name, e)
+
+    async def async_update(self) -> None:
+        """Update from the device."""
+        try:
+            settings = await self._read_settings()
+            if settings and self._setting_key in settings:
+                self._is_on = bool(settings[self._setting_key])
+                self._available = True
+            else:
+                self._available = self._connection_manager.is_connected
+        except Exception as e:
+            _LOGGER.debug("Error updating %s: %s", self.name, e)
+            self._available = self._connection_manager.is_connected
+
+
+class GlanceClockMuteSwitch(GlanceClockSettingSwitch):
+    """Permanent mute.
+
+    Worth having its own control: a muted clock plays nothing at all, and with
+    no way to see the flag it looks like sound support is broken rather than
+    switched off.
+    """
+
+    _setting_key = "permanentMute"
+
+    def __init__(self, config_entry, mac_address, device_name, connection_manager):
+        """Initialize the mute switch."""
+        super().__init__(config_entry, mac_address, device_name, connection_manager)
+        self._attr_name = f"{device_name} Mute"
+        self._attr_unique_id = f"{mac_address}_permanent_mute"
+        self._attr_icon = "mdi:volume-off"

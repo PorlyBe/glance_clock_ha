@@ -12,7 +12,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from .animation_state import get_animation_state
 from .const import COLORS, DOMAIN, SOUNDS
 from .entity import GlanceClockEntity
-from .utils.led_utils import ANIMATIONS
+from .utils.led_utils import RUNNABLE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -200,7 +200,7 @@ class GlanceClockAnimationSelect(GlanceClockAnimationChoice):
     """Which animation to run."""
 
     _state_key = "animation"
-    _attr_options = sorted(ANIMATIONS)
+    _attr_options = sorted(RUNNABLE)
 
     def __init__(self, config_entry, mac_address, device_name, connection_manager):
         """Initialize the animation select."""

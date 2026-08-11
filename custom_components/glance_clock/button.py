@@ -4,6 +4,7 @@ import logging
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -11,11 +12,13 @@ from .animation_state import get_animation_state
 from .const import DOMAIN
 from .entity import GlanceClockEntity
 from .utils.led_utils import (
+    EFFECTS,
     PIXELS_PER_RING,
     RING_COUNT,
     check_speed,
     pack_segment,
     resolve_animation,
+    scene_steps_from_config,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -26,6 +29,10 @@ _LOGGER = logging.getLogger(__name__)
 # HOMING_CONFIRM accepts wherever they are as the new reference.
 HOMING_START = 43
 HOMING_CONFIRM = 44
+
+# How long an effect runs from the Run button. Matches the fifty seconds the
+# firmware animations get, so switching between them feels the same.
+EFFECT_SECONDS = 50
 
 
 async def async_setup_entry(
@@ -147,6 +154,11 @@ class GlanceClockRunAnimationButton(GlanceClockEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Pack the chosen settings and send them."""
         state = get_animation_state(self.hass, self._config_entry.entry_id)
+        choice = str(state["animation"]).strip().lower()
+
+        if choice in EFFECTS:
+            await self._run_effect(choice, state)
+            return
 
         try:
             animation = resolve_animation(state["animation"])
@@ -160,9 +172,9 @@ class GlanceClockRunAnimationButton(GlanceClockEntity, ButtonEntity):
             )
         except ValueError as err:
             # Most likely a negative speed on an animation that has no
-            # direction. Say so; the slider cannot know which is selected.
-            _LOGGER.error("Cannot run animation: %s", err)
-            return
+            # direction. Raised rather than logged: a message in the log is a
+            # message nobody reads, and the press otherwise looks successful.
+            raise ServiceValidationError(f"Cannot run animation: {err}") from err
 
         notify_service = self.hass.data.get(DOMAIN + "_notify", {}).get(
             self._config_entry.entry_id
@@ -180,6 +192,49 @@ class GlanceClockRunAnimationButton(GlanceClockEntity, ButtonEntity):
             speed=speed,
             mode=ANIMATION_MODE,
             slot=ANIMATION_SLOT,
+        )
+
+    async def _run_effect(self, effect: str, state: dict) -> None:
+        """Play one of the three effects over the whole ring.
+
+        An effect modulates an area that is already lit rather than drawing
+        anything, so the area has to be filled first and the effect chained
+        after it -- overlapping the two lets the fill hold the area at a
+        constant colour and swallow the effect entirely.
+        """
+        colour = state["color"]
+        try:
+            speed = check_speed(effect, state["speed"])
+            steps = scene_steps_from_config(
+                [
+                    {
+                        "type": "fill", "seconds": 0.5,
+                        "start": 0, "length": PIXELS_PER_RING,
+                        "ring": 0, "rings_tall": RING_COUNT, "color": colour,
+                    },
+                    {
+                        "type": "effect", "seconds": EFFECT_SECONDS,
+                        "effect": effect, "speed": speed, "color": colour,
+                        "start": 0, "length": PIXELS_PER_RING,
+                        "ring": 0, "rings_tall": RING_COUNT,
+                    },
+                ]
+            )
+        except ValueError as err:
+            raise ServiceValidationError(f"Cannot run effect: {err}") from err
+
+        notify_service = self.hass.data.get(DOMAIN + "_notify", {}).get(
+            self._config_entry.entry_id
+        )
+        if not notify_service:
+            _LOGGER.error("Notification service not available for animations")
+            return
+
+        if self._connection_manager and not hasattr(notify_service, "_connection_manager"):
+            notify_service._connection_manager = self._connection_manager
+
+        await notify_service.async_send_scene(
+            steps, mode=ANIMATION_MODE, slot=ANIMATION_SLOT
         )
 
 

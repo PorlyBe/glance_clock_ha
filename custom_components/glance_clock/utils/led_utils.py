@@ -182,6 +182,11 @@ METHOD_WEATHER = 9
 #:               the duration, so pick the flash colour as the one you want
 EFFECTS = {"pulse": 0, "wave": 1, "light_flash": 2}
 
+#: Everything the Animation Run button can play. The effects need an area drawn
+#: for them first, which that button supplies, so from the UI they behave like
+#: any other animation.
+RUNNABLE = tuple(sorted({*ANIMATIONS, *EFFECTS}))
+
 #: WeatherData is a particle effect, not a forecast readout.
 WEATHER_CONDITIONS = {"snow": 0, "rain": 1, "fog": 2}
 WEATHER_POSITIONS = {"full": 0, "upper": 1, "lower": 2}

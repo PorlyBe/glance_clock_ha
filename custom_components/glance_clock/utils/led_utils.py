@@ -62,13 +62,32 @@ ANIMATIONS = (ANIMATION_SWEEP, *GIF_ANIMATIONS)
 GIF_LENGTH_MULTIPLE = 8
 
 
+#: The palette is the firmware's own list and has no plain "green", "purple",
+#: "orange" or "cyan" -- the first names anyone reaches for. Guessing wrong used
+#: to fail as silence, so the obvious names map to their nearest real entry.
+COLOR_ALIASES = {
+    "green": "lime_green",
+    "cyan": "aqua",
+    "magenta": "dark_magenta",
+    "purple": "indigo",
+    "violet": "blue_violet",
+    "orange": "dark_orange",
+    "gold": "dark_golden_rod",
+    "spring_green": "medium_spring_green",
+    "off": "black",
+}
+
+
 def resolve_color(color) -> int:
     """Accept either a colour name from COLORS or a raw palette index."""
     if isinstance(color, str):
         key = color.strip().lower()
+        key = COLOR_ALIASES.get(key, key)
         if key not in COLORS:
             raise ValueError(
-                f"unknown colour '{color}'; expected one of {', '.join(sorted(COLORS))}"
+                f"unknown colour '{color}'; expected one of "
+                f"{', '.join(sorted(COLORS))} (or one of the aliases "
+                f"{', '.join(sorted(COLOR_ALIASES))})"
             )
         return COLORS[key]
 

@@ -3,6 +3,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
 
 from ..const import DOMAIN
 from ..utils.led_utils import (
@@ -44,10 +45,10 @@ async def handle_set_leds(hass: HomeAssistant, entry: ConfigEntry, call: Service
         segments = segments_from_config(call.data.get("segments") or [])
         mode = resolve_mode(call.data.get("mode", "watchface"))
     except (ValueError, TypeError) as err:
-        # Bad geometry is a user mistake, not a bug -- say what was wrong
-        # rather than letting a malformed frame reach the clock.
-        _LOGGER.error("set_leds: %s", err)
-        return
+        # Raised rather than logged: a bad colour or bad geometry is a
+        # mistake in the call, and swallowing it makes the service look
+        # like it worked while the clock never hears from it.
+        raise ServiceValidationError(f"set_leds: {err}") from err
 
     await notify_service.async_send_custom_scene(
         segments,
@@ -71,8 +72,10 @@ async def handle_set_scene(hass: HomeAssistant, entry: ConfigEntry, call: Servic
         )
         mode = resolve_mode(call.data.get("mode", "watchface"))
     except (ValueError, TypeError) as err:
-        _LOGGER.error("set_scene: %s", err)
-        return
+        # Raised rather than logged: a bad colour or bad geometry is a
+        # mistake in the call, and swallowing it makes the service look
+        # like it worked while the clock never hears from it.
+        raise ServiceValidationError(f"set_scene: {err}") from err
 
     if mode == DISPLAY_MODES["watchface"] and any(s["type"] == "text" for s in steps):
         # The digital clockface owns the matrix in this mode, so the text has
@@ -120,8 +123,10 @@ async def handle_set_animation(hass: HomeAssistant, entry: ConfigEntry, call: Se
             rings_tall=int(call.data.get("rings_tall", 4)),
         )
     except (ValueError, TypeError) as err:
-        _LOGGER.error("set_animation: %s", err)
-        return
+        # Raised rather than logged: a bad colour or bad geometry is a
+        # mistake in the call, and swallowing it makes the service look
+        # like it worked while the clock never hears from it.
+        raise ServiceValidationError(f"set_animation: {err}") from err
 
     await notify_service.async_send_animation(
         animation,

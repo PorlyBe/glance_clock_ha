@@ -318,3 +318,25 @@ def test_swedish_characters_survive_the_matrix_font() -> None:
     # Anything unmappable becomes the font's missing-character glyph, so a lost
     # letter is visible instead of silently becoming a different one.
     assert encode("\u65e5") == bytes([154])
+
+
+def test_the_obvious_colour_names_resolve_to_the_nearest_real_entry():
+    # The firmware palette has no plain "green", and a call using it used to
+    # fail as silence rather than as an error.
+    assert led_utils.resolve_color("green") == led_utils.COLORS["lime_green"]
+    assert led_utils.resolve_color("cyan") == led_utils.COLORS["aqua"]
+    assert led_utils.resolve_color("purple") == led_utils.COLORS["indigo"]
+    assert led_utils.resolve_color("off") == led_utils.COLORS["black"]
+
+
+def test_an_alias_is_matched_regardless_of_case_and_padding():
+    assert led_utils.resolve_color("  GREEN ") == led_utils.COLORS["lime_green"]
+
+
+def test_an_unknown_colour_names_both_the_palette_and_the_aliases():
+    # The message is the whole point: it is what turns a silent no-op into a
+    # fix that takes ten seconds.
+    with pytest.raises(ValueError) as err:
+        led_utils.resolve_color("chartreuse")
+    assert "lime_green" in str(err.value)
+    assert "green" in str(err.value)

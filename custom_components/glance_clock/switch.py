@@ -262,12 +262,19 @@ class GlanceClockTimePointsSwitch(GlanceClockEntity, SwitchEntity):
 
 
 class GlanceClockTimeModeSwitch(GlanceClockEntity, SwitchEntity):
-    """Time mode switch for Glance Clock."""
+    """Shows or hides the digital time on the LED matrix.
+
+    The setting is `timeModeEnable` in the clock's own message, and calling the
+    switch "Time Mode" after it said what the field is called without saying
+    what it does -- so the control existed but nobody found it. Verified on
+    hardware: off hides the digital time entirely, leaving the hands, the hour
+    points and whatever scene is running.
+    """
 
     def __init__(self, config_entry, mac_address, device_name, connection_manager):
-        """Initialize the time mode switch."""
+        """Initialize the digital clock switch."""
         super().__init__(config_entry, mac_address, device_name, connection_manager)
-        self._attr_name = f"{device_name} Time Mode"
+        self._attr_name = f"{device_name} Digital Clock"
         self._attr_unique_id = f"{mac_address}_time_mode"
         self._attr_icon = "mdi:clock"
         self._is_on = None

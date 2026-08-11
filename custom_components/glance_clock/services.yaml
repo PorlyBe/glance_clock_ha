@@ -629,3 +629,40 @@ set_scene:
           min: 0
           max: 7
           mode: box
+
+send_command:
+  name: Send command
+  description: >-
+    Send a raw command frame to the clock. This is the escape hatch for parts of the
+    firmware the integration does not model yet, and for driving the clock from
+    Node-RED. A frame is a command byte, up to three modifier bytes, and an optional
+    payload; missing modifiers are padded with zeroes. Useful commands include 30
+    (stop scene playback), 31 (start scene playback), 35 (update and refresh) and 61
+    and 60 (start and stop the brightness scene). Commands 42 and 50 are blocked
+    because they unpair the clock or wipe user data, and neither can be undone
+    without the manufacturer's servers.
+  fields:
+    command:
+      name: Command
+      description: The command byte.
+      required: true
+      example: 31
+      selector:
+        number:
+          min: 0
+          max: 255
+          mode: box
+    modifiers:
+      name: Modifiers
+      description: Up to three modifier bytes. Omitted ones are sent as zero.
+      required: false
+      example: "[0, 0, 0]"
+      selector:
+        object:
+    payload:
+      name: Payload
+      description: Optional payload, as a hex string such as "20 01" or a list of bytes.
+      required: false
+      example: "2001"
+      selector:
+        text:

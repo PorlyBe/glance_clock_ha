@@ -158,3 +158,41 @@ def test_two_writes_in_a_row_do_not_revert_each_other() -> None:
     assert final.dateFormat == 0
     assert final.dnd.fromHour == 21  # and nothing else was lost
     assert field_numbers(device_bytes) == field_numbers(REAL_SETTINGS)
+
+
+BRIGHTNESS_LEVEL_MASK = 0xFF
+
+
+def test_brightness_level_is_the_low_byte_only() -> None:
+    """Measured on hardware: 1 barely visible, 255 full, 0 automatic.
+
+    A working clock reported 2016768, whose low byte is 0 -- automatic. Reading
+    the whole field as a 0-255 level would call that "brightness 2016768".
+    """
+    assert 2016768 & BRIGHTNESS_LEVEL_MASK == 0
+    assert 0x1EC680 & BRIGHTNESS_LEVEL_MASK == 128
+
+
+def test_setting_brightness_preserves_the_upper_bits() -> None:
+    """Mirrors _set_brightness in light.py."""
+
+    def write(raw: int, level: int) -> int:
+        return (raw & ~BRIGHTNESS_LEVEL_MASK) | (level & BRIGHTNESS_LEVEL_MASK)
+
+    assert write(2016768, 128) == 0x1EC680
+    assert write(0x1EC680, 0) == 2016768  # back to automatic, range intact
+    assert write(2016768, 255) == 0x1EC6FF
+
+
+def test_brightness_survives_a_settings_round_trip() -> None:
+    settings = Settings()
+    settings.ParseFromString(REAL_SETTINGS)
+    settings.displayBrightness = (
+        settings.displayBrightness & ~BRIGHTNESS_LEVEL_MASK
+    ) | 200
+
+    reread = Settings()
+    reread.ParseFromString(settings.SerializeToString())
+    assert reread.displayBrightness == 0x1EC6C8
+    assert reread.displayBrightness & BRIGHTNESS_LEVEL_MASK == 200
+    assert reread.dnd.fromHour == 21

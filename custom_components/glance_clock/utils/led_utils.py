@@ -141,6 +141,63 @@ def segments_from_config(items: list[dict]) -> list[int]:
     return packed
 
 
+#: The clock plays scenes at this rate, so all times are in fiftieths.
+FRAMES_PER_SECOND = 50
+
+
+def scene_steps_from_config(
+    items: list[dict],
+    default_frames: int = 25,
+) -> list[dict]:
+    """Normalise a list of animation steps into frame-timed fills.
+
+    Each step may give `at` (the frame it starts on) and either `frames` or
+    `seconds` for how long it runs. Omitting `at` chains the step onto the end
+    of the previous one, which is what you want almost every time.
+
+    Anything drawn stays on screen after its step ends -- the clock does not
+    clear between frames -- so a step that should erase something has to paint
+    over it.
+    """
+    if not items:
+        raise ValueError("a scene needs at least one step")
+
+    steps: list[dict] = []
+    cursor = 0
+
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise ValueError(f"step {index} must be a mapping, got {type(item).__name__}")
+
+        frames = item.get("frames")
+        if frames is None and "seconds" in item:
+            frames = round(float(item["seconds"]) * FRAMES_PER_SECOND)
+        frames = int(default_frames if frames is None else frames)
+        if frames < 1:
+            raise ValueError(f"step {index}: frames must be at least 1")
+
+        at = cursor if item.get("at") is None else int(item["at"])
+        if at < 0:
+            raise ValueError(f"step {index}: 'at' cannot be negative")
+
+        segments = item.get("segments")
+        if segments is None and "start" in item:
+            # A step with a single area can be written flat, without nesting a
+            # one-item list inside it.
+            segments = [item]
+
+        steps.append(
+            {
+                "at": at,
+                "frames": frames,
+                "segments": segments_from_config(segments or []),
+            }
+        )
+        cursor = at + frames
+
+    return steps
+
+
 def resolve_animation(name) -> str:
     """Validate an animation name."""
     key = str(name).strip().lower()

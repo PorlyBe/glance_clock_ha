@@ -13,6 +13,7 @@ from ..utils.led_utils import (
     pack_segment,
     resolve_animation,
     resolve_mode,
+    scene_steps_from_config,
     segments_from_config,
 )
 
@@ -52,6 +53,30 @@ async def handle_set_leds(hass: HomeAssistant, entry: ConfigEntry, call: Service
         mode=mode,
         slot=int(call.data.get("slot", 0)),
         life_time=int(call.data.get("life_time", 50)),
+    )
+
+
+async def handle_set_scene(hass: HomeAssistant, entry: ConfigEntry, call: ServiceCall):
+    """Send a timed sequence of fills the clock plays itself."""
+    notify_service = _notify_service(hass, entry)
+    if not notify_service:
+        _LOGGER.error("Notification service not found for set_scene")
+        return
+
+    try:
+        steps = scene_steps_from_config(
+            call.data.get("steps") or [],
+            default_frames=int(call.data.get("default_frames", 25)),
+        )
+        mode = resolve_mode(call.data.get("mode", "watchface"))
+    except (ValueError, TypeError) as err:
+        _LOGGER.error("set_scene: %s", err)
+        return
+
+    await notify_service.async_send_scene(
+        steps,
+        mode=mode,
+        slot=int(call.data.get("slot", 0)),
     )
 
 

@@ -480,3 +480,57 @@ set_animation:
           min: 1
           max: 30000
           mode: box
+
+set_scene:
+  name: Set scene
+  description: >-
+    Send a timed sequence of fills that the clock plays itself at 50 frames per second.
+    This is how to animate: one call uploads the whole timeline. Sending fills one at a
+    time cannot animate, because a scene change only takes effect on the clock's roughly
+    15 second scene cycle.
+  fields:
+    steps:
+      name: Steps
+      description: >-
+        List of steps. Each takes 'segments' (same shape as Set LEDs) plus 'frames' or
+        'seconds' for how long it runs, and optionally 'at' to place it on the timeline.
+        Without 'at' a step follows on from the previous one. Anything drawn stays on
+        screen after its step ends, so paint black over what should disappear.
+      required: true
+      example: |-
+        - seconds: 0.5
+          segments:
+            - { start: 0, length: 6, ring: 0, rings_tall: 4, color: red }
+        - seconds: 0.5
+          segments:
+            - { start: 0, length: 6, ring: 0, rings_tall: 4, color: black }
+            - { start: 6, length: 6, ring: 0, rings_tall: 4, color: red }
+      selector:
+        object:
+    default_frames:
+      name: Default frames
+      description: How long a step runs when it gives neither frames nor seconds.
+      default: 25
+      selector:
+        number:
+          min: 1
+          max: 3000
+          mode: box
+    mode:
+      name: Display mode
+      default: watchface
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - watchface
+            - exclusive
+            - ring_and_text
+    slot:
+      name: Scene slot
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 7
+          mode: box

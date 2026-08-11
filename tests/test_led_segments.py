@@ -170,3 +170,71 @@ def test_only_the_sweep_accepts_a_direction() -> None:
         check_speed("fire", -3)
     with pytest.raises(ValueError, match="sweep speed"):
         check_speed(ANIMATION_SWEEP, 11)
+
+
+scene_steps_from_config = led_utils.scene_steps_from_config
+FRAMES_PER_SECOND = led_utils.FRAMES_PER_SECOND
+
+
+def test_steps_chain_onto_each_other_by_default() -> None:
+    steps = scene_steps_from_config(
+        [
+            {"frames": 25, "segments": [{"start": 0, "color": "red"}]},
+            {"frames": 25, "segments": [{"start": 6, "color": "red"}]},
+            {"frames": 10, "segments": [{"start": 12, "color": "red"}]},
+        ]
+    )
+    assert [(s["at"], s["frames"]) for s in steps] == [(0, 25), (25, 25), (50, 10)]
+
+
+def test_an_explicit_start_frame_wins_and_moves_the_cursor() -> None:
+    steps = scene_steps_from_config(
+        [
+            {"frames": 25, "segments": [{"start": 0, "color": "red"}]},
+            {"at": 100, "frames": 25, "segments": [{"start": 6, "color": "red"}]},
+            {"frames": 25, "segments": [{"start": 12, "color": "red"}]},
+        ]
+    )
+    assert [s["at"] for s in steps] == [0, 100, 125]
+
+
+def test_seconds_convert_to_frames() -> None:
+    steps = scene_steps_from_config([{"seconds": 0.5, "segments": [{"start": 0, "color": "red"}]}])
+    assert steps[0]["frames"] == FRAMES_PER_SECOND // 2
+
+
+def test_a_single_area_step_can_be_written_flat() -> None:
+    """Nesting a one-item list inside every step is needless ceremony."""
+    flat = scene_steps_from_config([{"start": 3, "color": "lime", "frames": 5}])
+    nested = scene_steps_from_config(
+        [{"frames": 5, "segments": [{"start": 3, "color": "lime"}]}]
+    )
+    assert flat == nested
+
+
+def test_the_chase_that_ran_on_hardware() -> None:
+    """Eight steps, each erasing the previous block -- a single block moved."""
+    steps = scene_steps_from_config(
+        [
+            {
+                "seconds": 0.5,
+                "segments": [
+                    {"start": ((i - 1) % 8) * 6, "length": 6, "rings_tall": 4, "color": "black"},
+                    {"start": i * 6, "length": 6, "rings_tall": 4, "color": "red"},
+                ],
+            }
+            for i in range(8)
+        ]
+    )
+    assert len(steps) == 8
+    assert steps[-1]["at"] + steps[-1]["frames"] == 200  # four seconds
+    assert steps[1]["segments"][1] == pack_segment(6, "red", length=6, rings_tall=4)
+
+
+def test_empty_and_malformed_scenes_are_rejected() -> None:
+    with pytest.raises(ValueError, match="at least one step"):
+        scene_steps_from_config([])
+    with pytest.raises(ValueError, match="frames must be at least 1"):
+        scene_steps_from_config([{"frames": 0, "segments": [{"start": 0, "color": "red"}]}])
+    with pytest.raises(ValueError, match="cannot be negative"):
+        scene_steps_from_config([{"at": -1, "segments": [{"start": 0, "color": "red"}]}])

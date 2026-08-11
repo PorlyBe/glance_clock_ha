@@ -374,6 +374,55 @@ class GlanceClockNotificationService(BaseNotificationService):
             _LOGGER.error(f"Error sending custom scene: {e}")
             return False
 
+    async def async_send_scene(
+        self,
+        steps: list[dict],
+        mode: int = 8,
+        slot: int = 0,
+    ) -> bool:
+        """Send a timed sequence of fills as one scene.
+
+        The clock plays the whole thing itself at 50 FPS, so this is how to
+        animate: upload a timeline rather than streaming frames. Sending fills
+        one at a time cannot animate, because a scene change only takes effect
+        on the clock's roughly 15 second scene cycle.
+        """
+        if not self._connection_manager or not self._connection_manager.is_connected:
+            _LOGGER.warning("Device not connected, cannot send scene")
+            return False
+
+        try:
+            from .glance_pb2 import CustomScene  # type: ignore
+            from .utils.led_utils import METHOD_FILL
+
+            scene = CustomScene()
+            for step in steps:
+                obj = scene.object.add()
+                obj.method = METHOD_FILL
+                obj.startTime = step["at"]
+                obj.lifeTime = step["frames"]
+                obj.fill.segment.extend(step["segments"])
+
+            command = bytes([0, 0, mode, slot]) + scene.SerializeToString()
+
+            _LOGGER.info(
+                "Sending scene: %d step(s), %d frames total, mode %d, slot %d",
+                len(steps),
+                max((s["at"] + s["frames"] for s in steps), default=0),
+                mode, slot,
+            )
+            _LOGGER.debug("Scene command: %s", command.hex())
+
+            if await self._connection_manager.send_command(command):
+                _LOGGER.info("Scene sent successfully")
+                return True
+
+            _LOGGER.error("Failed to send scene command")
+            return False
+        except Exception as e:
+            _LOGGER.error(f"Error sending scene: {e}")
+            return False
+
     async def async_send_animation(
         self,
         animation: str,

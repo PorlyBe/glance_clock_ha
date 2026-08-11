@@ -311,30 +311,7 @@ class GlanceClockNotificationService(BaseNotificationService):
                 _LOGGER.debug(f"  Protobuf attempt: {protobuf_data.hex()}")
                 return None
 
-            # Convert to dictionary
-            settings_dict = {
-                "nightModeEnabled": settings.nightModeEnabled,
-                "pointsAlwaysEnabled": settings.pointsAlwaysEnabled,
-                "displayBrightness": settings.displayBrightness,
-                "timeModeEnable": settings.timeModeEnable,
-                "timeFormat12": settings.timeFormat12,
-                "permanentDND": settings.permanentDND,
-                "permanentMute": settings.permanentMute,
-                "dateFormat": settings.dateFormat,
-                "mgrUserActivityTimeout": settings.mgrUserActivityTimeout,
-                # The scheduled Do-Not-Disturb window, if the device has one.
-                # None means no schedule is stored at all, which is different
-                # from a schedule of 00:00-00:00.
-                "dndRecurring": settings.dnd.recurring if settings.HasField("dnd") else None,
-                "dndFromHour": settings.dnd.fromHour if settings.HasField("dnd") else None,
-                "dndTillHour": settings.dnd.tillHour if settings.HasField("dnd") else None,
-                # Keep the device's own bytes. A settings write has to send the
-                # whole message, and real hardware carries fields this schema
-                # does not model -- a nested DND schedule, and at least one
-                # undocumented field. Writing a message rebuilt from the keys
-                # above silently deletes them. See async_write_settings.
-                RAW_SETTINGS_KEY: bytes(protobuf_data),
-            }
+            settings_dict = self._settings_to_dict(settings, protobuf_data)
 
             _LOGGER.debug("Successfully read settings from device")
 
@@ -347,6 +324,32 @@ class GlanceClockNotificationService(BaseNotificationService):
         except Exception as e:
             _LOGGER.debug(f"Could not read settings from device: {e}")
             return None
+
+    @staticmethod
+    def _settings_to_dict(settings, raw: bytes) -> dict:
+        """Decode a Settings message into the dict the entities consume.
+
+        The raw bytes travel with it because a write has to patch the device's
+        own message rather than rebuild it -- see async_write_settings.
+        """
+        has_dnd = settings.HasField("dnd")
+        return {
+            "nightModeEnabled": settings.nightModeEnabled,
+            "pointsAlwaysEnabled": settings.pointsAlwaysEnabled,
+            "displayBrightness": settings.displayBrightness,
+            "timeModeEnable": settings.timeModeEnable,
+            "timeFormat12": settings.timeFormat12,
+            "permanentDND": settings.permanentDND,
+            "permanentMute": settings.permanentMute,
+            "dateFormat": settings.dateFormat,
+            "mgrUserActivityTimeout": settings.mgrUserActivityTimeout,
+            # None means no schedule is stored at all, which is different from
+            # a schedule of 00:00-00:00.
+            "dndRecurring": settings.dnd.recurring if has_dnd else None,
+            "dndFromHour": settings.dnd.fromHour if has_dnd else None,
+            "dndTillHour": settings.dnd.tillHour if has_dnd else None,
+            RAW_SETTINGS_KEY: bytes(raw),
+        }
 
     async def async_read_current_settings_safe(self) -> dict | None:
         """Safe wrapper for reading settings."""
@@ -506,7 +509,16 @@ class GlanceClockNotificationService(BaseNotificationService):
             
             if success:
                 _LOGGER.info("Settings written successfully")
-                
+
+                # Make the cache reflect what was just written. Without this the
+                # next write within the cache lifetime starts from pre-write
+                # bytes and silently reverts this change -- two settings changed
+                # in quick succession would fight each other.
+                if self._connection_manager:
+                    self._connection_manager.cache_settings(
+                        self._settings_to_dict(settings, settings_bytes)
+                    )
+
                 # If this was a brightness change, schedule brightness scene stop after 3 seconds
                 # (like the web app does)
                 if is_brightness_change:

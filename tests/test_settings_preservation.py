@@ -126,3 +126,35 @@ def test_creating_a_dnd_window_on_a_device_without_one() -> None:
     reread = Settings()
     reread.ParseFromString(bare.SerializeToString())
     assert (reread.dnd.fromHour, reread.dnd.tillHour) == (23, 6)
+
+
+def test_two_writes_in_a_row_do_not_revert_each_other() -> None:
+    """Regression: the settings cache must reflect the write, not the last read.
+
+    With a stale cache, the second change starts from pre-first-change bytes
+    and silently undoes it -- which is what made the switches in Home Assistant
+    disagree with the device.
+    """
+    device_bytes = REAL_SETTINGS
+
+    def write(base: bytes, **changes) -> bytes:
+        """Mirrors async_write_settings: patch the base, return what was sent."""
+        settings = Settings()
+        settings.ParseFromString(base)
+        for key, value in changes.items():
+            setattr(settings, key, value)
+        return settings.SerializeToString()
+
+    # First change: turn night mode off.
+    device_bytes = write(device_bytes, nightModeEnabled=False)
+    cache = device_bytes  # the fix: cache what was written
+
+    # Second change moments later: date format, starting from the cache.
+    device_bytes = write(cache, dateFormat=0)
+
+    final = Settings()
+    final.ParseFromString(device_bytes)
+    assert final.nightModeEnabled is False, "second write reverted the first"
+    assert final.dateFormat == 0
+    assert final.dnd.fromHour == 21  # and nothing else was lost
+    assert field_numbers(device_bytes) == field_numbers(REAL_SETTINGS)

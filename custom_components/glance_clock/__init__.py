@@ -17,6 +17,7 @@ PLATFORMS = [
     Platform.LIGHT,
     Platform.SELECT,
     Platform.NUMBER,
+    Platform.BUTTON,
 ]
 
 

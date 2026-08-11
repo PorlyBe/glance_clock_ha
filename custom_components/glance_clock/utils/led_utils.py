@@ -168,8 +168,18 @@ METHOD_TEXT = 4
 METHOD_AREA_ANIMATION = 7
 METHOD_WEATHER = 9
 
-#: AreaAnimationData.Type. These are layered onto areas already drawn in the
-#: same scene rather than drawing anything themselves.
+#: AreaAnimationData.Type. These modulate areas already drawn in the same scene
+#: rather than drawing anything themselves, so an effect step has to be chained
+#: *after* the fill that drew its area -- overlapping the two in time lets the
+#: fill hold the area at a constant colour and overwrite the modulation.
+#:
+#: Verified on hardware:
+#:   pulse       the area breathes, dimming and brightening in place
+#:   wave        runs across the rings from the inside out, not around them,
+#:               and leaves them at differing intensities when it stops
+#:   light_flash flashes at uneven intervals, and *replaces* the area's colour
+#:               rather than layering over it -- the fill colour is gone for
+#:               the duration, so pick the flash colour as the one you want
 EFFECTS = {"pulse": 0, "wave": 1, "light_flash": 2}
 
 #: WeatherData is a particle effect, not a forecast readout.

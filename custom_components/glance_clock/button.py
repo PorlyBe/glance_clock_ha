@@ -7,8 +7,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .animation_state import get_animation_state
 from .const import DOMAIN
 from .entity import GlanceClockEntity
+from .utils.led_utils import (
+    PIXELS_PER_RING,
+    RING_COUNT,
+    check_speed,
+    pack_segment,
+    resolve_animation,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +44,10 @@ async def async_setup_entry(
             GlanceClockCalibrateHandsButton(
                 config_entry, mac_address, name, connection_manager),
             GlanceClockConfirmHandsButton(
+                config_entry, mac_address, name, connection_manager),
+            GlanceClockRunAnimationButton(
+                config_entry, mac_address, name, connection_manager),
+            GlanceClockStopAnimationButton(
                 config_entry, mac_address, name, connection_manager),
         ]
     )
@@ -100,3 +112,96 @@ class GlanceClockConfirmHandsButton(GlanceClockCommandButton):
         self._attr_name = f"{device_name} Confirm Hand Positions at 12"
         self._attr_unique_id = f"{mac_address}_confirm_hand_position"
         self._attr_icon = "mdi:check-decagram-outline"
+
+
+#: The animation buttons drive this slot, so running one replaces the last
+#: rather than filling the clock's slots and making it cycle between them.
+ANIMATION_SLOT = 0
+
+#: Watchface: the animation and the digital time show at once. Verified on
+#: hardware -- mode 24 alternates between them instead.
+ANIMATION_MODE = 8
+
+
+class GlanceClockRunAnimationButton(GlanceClockEntity, ButtonEntity):
+    """Send the animation chosen by the animation selects and speed slider."""
+
+    def __init__(self, config_entry, mac_address, device_name, connection_manager):
+        """Initialize the run animation button."""
+        super().__init__(config_entry, mac_address, device_name, connection_manager)
+        self._attr_name = f"{device_name} Run Animation"
+        self._attr_unique_id = f"{mac_address}_run_animation"
+        self._attr_icon = "mdi:play-circle-outline"
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self._connection_manager.is_connected
+
+    async def async_press(self) -> None:
+        """Pack the chosen settings and send them."""
+        state = get_animation_state(self.hass, self._config_entry.entry_id)
+
+        try:
+            animation = resolve_animation(state["animation"])
+            speed = check_speed(animation, state["speed"])
+            segment = pack_segment(
+                0,
+                state["color"],
+                length=PIXELS_PER_RING,
+                ring=0,
+                rings_tall=RING_COUNT,
+            )
+        except ValueError as err:
+            # Most likely a negative speed on an animation that has no
+            # direction. Say so; the slider cannot know which is selected.
+            _LOGGER.error("Cannot run animation: %s", err)
+            return
+
+        notify_service = self.hass.data.get(DOMAIN + "_notify", {}).get(
+            self._config_entry.entry_id
+        )
+        if not notify_service:
+            _LOGGER.error("Notification service not available for animations")
+            return
+
+        if self._connection_manager and not hasattr(notify_service, "_connection_manager"):
+            notify_service._connection_manager = self._connection_manager
+
+        await notify_service.async_send_animation(
+            animation,
+            segment,
+            speed=speed,
+            mode=ANIMATION_MODE,
+            slot=ANIMATION_SLOT,
+        )
+
+
+class GlanceClockStopAnimationButton(GlanceClockEntity, ButtonEntity):
+    """Clear whatever the Run Animation button last sent."""
+
+    def __init__(self, config_entry, mac_address, device_name, connection_manager):
+        """Initialize the stop animation button."""
+        super().__init__(config_entry, mac_address, device_name, connection_manager)
+        self._attr_name = f"{device_name} Stop Animation"
+        self._attr_unique_id = f"{mac_address}_stop_animation"
+        self._attr_icon = "mdi:stop-circle-outline"
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self._connection_manager.is_connected
+
+    async def async_press(self) -> None:
+        """Delete the animation slot."""
+        notify_service = self.hass.data.get(DOMAIN + "_notify", {}).get(
+            self._config_entry.entry_id
+        )
+        if not notify_service:
+            _LOGGER.error("Notification service not available for animations")
+            return
+
+        if self._connection_manager and not hasattr(notify_service, "_connection_manager"):
+            notify_service._connection_manager = self._connection_manager
+
+        await notify_service.async_delete_scene(ANIMATION_SLOT)

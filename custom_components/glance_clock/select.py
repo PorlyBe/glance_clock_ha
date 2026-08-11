@@ -7,8 +7,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from homeassistant.helpers.restore_state import RestoreEntity
+
+from .animation_state import get_animation_state
+from .const import COLORS, DOMAIN
 from .entity import GlanceClockEntity
+from .utils.led_utils import ANIMATIONS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,6 +41,8 @@ async def async_setup_entry(
 
     entities = [
         GlanceClockDateFormatSelect(config_entry, mac_address, name, connection_manager),
+        GlanceClockAnimationSelect(config_entry, mac_address, name, connection_manager),
+        GlanceClockAnimationColorSelect(config_entry, mac_address, name, connection_manager),
     ]
 
     async_add_entities(entities)
@@ -155,3 +161,65 @@ class GlanceClockDateFormatSelect(GlanceClockEntity, SelectEntity):
         if self._connection_manager:
             self._connection_manager.remove_connection_callback(self._on_connection_established)
         await super().async_will_remove_from_hass()
+
+class GlanceClockAnimationChoice(GlanceClockEntity, SelectEntity, RestoreEntity):
+    """One field of the animation the Run Animation button will send.
+
+    This is a local choice, not device state -- the clock stores no pending
+    animation -- so it restores from Home Assistant rather than from a read.
+    """
+
+    _state_key: str
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the chosen value."""
+        return get_animation_state(self.hass, self._config_entry.entry_id)[self._state_key]
+
+    @property
+    def available(self) -> bool:
+        """Always available; nothing is read from the clock."""
+        return True
+
+    async def async_select_option(self, option: str) -> None:
+        """Remember the choice for the next run."""
+        get_animation_state(self.hass, self._config_entry.entry_id)[self._state_key] = option
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the previous choice."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last and last.state in self.options:
+            get_animation_state(self.hass, self._config_entry.entry_id)[self._state_key] = last.state
+            self.async_write_ha_state()
+
+
+class GlanceClockAnimationSelect(GlanceClockAnimationChoice):
+    """Which animation to run."""
+
+    _state_key = "animation"
+    _attr_options = sorted(ANIMATIONS)
+
+    def __init__(self, config_entry, mac_address, device_name, connection_manager):
+        """Initialize the animation select."""
+        super().__init__(config_entry, mac_address, device_name, connection_manager)
+        self._attr_name = f"{device_name} Animation"
+        self._attr_unique_id = f"{mac_address}_animation"
+        self._attr_icon = "mdi:animation-play"
+
+
+class GlanceClockAnimationColorSelect(GlanceClockAnimationChoice):
+    """Which colour to tint the animation with."""
+
+    _state_key = "color"
+    # Black is deliberately excluded: it is a valid colour that renders
+    # nothing, which is indistinguishable from a failure.
+    _attr_options = sorted(name for name in COLORS if name != "black")
+
+    def __init__(self, config_entry, mac_address, device_name, connection_manager):
+        """Initialize the animation colour select."""
+        super().__init__(config_entry, mac_address, device_name, connection_manager)
+        self._attr_name = f"{device_name} Animation Colour"
+        self._attr_unique_id = f"{mac_address}_animation_color"
+        self._attr_icon = "mdi:palette"

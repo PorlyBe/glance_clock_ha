@@ -7,6 +7,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from homeassistant.helpers.restore_state import RestoreEntity
+
+from .animation_state import get_animation_state
 from .const import DOMAIN
 from .entity import GlanceClockEntity
 
@@ -28,6 +31,8 @@ async def async_setup_entry(
         [
             GlanceClockDndStartNumber(config_entry, mac_address, name, connection_manager),
             GlanceClockDndEndNumber(config_entry, mac_address, name, connection_manager),
+            GlanceClockAnimationSpeedNumber(
+                config_entry, mac_address, name, connection_manager),
         ]
     )
 
@@ -142,3 +147,52 @@ class GlanceClockDndEndNumber(GlanceClockDndHourNumber):
         self._attr_name = f"{device_name} DND End"
         self._attr_unique_id = f"{mac_address}_dnd_end"
         self._attr_icon = "mdi:bell-ring"
+
+
+class GlanceClockAnimationSpeedNumber(GlanceClockEntity, NumberEntity, RestoreEntity):
+    """Speed for the Run Animation button.
+
+    The range spans negatives because the sweep uses the sign as its direction.
+    The firmware animations have no direction and reject a negative value, which
+    the run button reports rather than silently clamping.
+    """
+
+    _attr_native_min_value = -10
+    _attr_native_max_value = 10
+    _attr_native_step = 1
+    _attr_mode = NumberMode.SLIDER
+
+    def __init__(self, config_entry, mac_address, device_name, connection_manager):
+        """Initialize the animation speed number."""
+        super().__init__(config_entry, mac_address, device_name, connection_manager)
+        self._attr_name = f"{device_name} Animation Speed"
+        self._attr_unique_id = f"{mac_address}_animation_speed"
+        self._attr_icon = "mdi:speedometer"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the chosen speed."""
+        return float(get_animation_state(self.hass, self._config_entry.entry_id)["speed"])
+
+    @property
+    def available(self) -> bool:
+        """Always available; nothing is read from the clock."""
+        return True
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Remember the speed for the next run."""
+        get_animation_state(self.hass, self._config_entry.entry_id)["speed"] = int(value)
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the previous speed."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is not None:
+            try:
+                get_animation_state(self.hass, self._config_entry.entry_id)["speed"] = int(
+                    float(last.state)
+                )
+                self.async_write_ha_state()
+            except (TypeError, ValueError):
+                pass

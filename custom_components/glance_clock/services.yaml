@@ -666,3 +666,18 @@ send_command:
       example: "2001"
       selector:
         text:
+
+read_characteristic:
+  name: Read characteristic
+  description: >-
+    Read one of the clock's GATT characteristics and return its bytes. Returns a
+    response rather than logging, so the result comes back to the caller.
+  fields:
+    characteristic:
+      name: Characteristic
+      description: One of settings, scene_data, scene_state, or a full UUID.
+      required: false
+      default: settings
+      example: scene_state
+      selector:
+        text:

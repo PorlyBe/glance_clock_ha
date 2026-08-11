@@ -95,6 +95,8 @@ class GlanceClockConfirmHandsButton(GlanceClockCommandButton):
     def __init__(self, config_entry, mac_address, device_name, connection_manager):
         """Initialize the confirm hand position button."""
         super().__init__(config_entry, mac_address, device_name, connection_manager)
-        self._attr_name = f"{device_name} Confirm Hand Position"
+        # Names the precondition rather than the action: pressing this while the
+        # hands are anywhere but straight up teaches the clock a wrong reference.
+        self._attr_name = f"{device_name} Confirm Hand Positions at 12"
         self._attr_unique_id = f"{mac_address}_confirm_hand_position"
         self._attr_icon = "mdi:check-decagram-outline"

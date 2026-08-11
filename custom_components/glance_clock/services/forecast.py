@@ -135,7 +135,8 @@ async def handle_send_forecast(hass: HomeAssistant, entry: ConfigEntry, call: Se
             min_color=gradient_min_color,
             values=bytes(values),
             start_timestamp=forecast_start_timestamp,
-            template=call.data.get("template", None)
+            template=call.data.get("template", None),
+            unit=_temperature_unit(hass, weather_state),
         )
 
         if success:
@@ -319,3 +320,19 @@ def _calculate_forecast_timestamp() -> int:
     _LOGGER.debug(f"  Local timestamp: {forecast_start_timestamp}")
 
     return forecast_start_timestamp
+
+
+def _temperature_unit(hass, weather_state) -> str:
+    """Return "C" or "F" for the numbers Home Assistant just handed us.
+
+    The weather entity reports in the user's own unit and Home Assistant does
+    the conversion, so the forecast values are already right -- it is only the
+    letter on the clock that has to match. The entity is asked first because a
+    single entity can override the system setting.
+    """
+    unit = None
+    if weather_state is not None:
+        unit = weather_state.attributes.get("temperature_unit")
+    if not unit:
+        unit = getattr(getattr(hass.config, "units", None), "temperature_unit", None)
+    return "F" if str(unit or "").upper().endswith("F") else "C"

@@ -3,7 +3,8 @@ import asyncio
 from homeassistant.components.notify.legacy import BaseNotificationService
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from .const import DOMAIN, GLANCE_SERVICE_UUID, SETTINGS_CHARACTERISTIC_UUID
+from .const import (DND_FIELD_NAMES, DOMAIN, GLANCE_SERVICE_UUID, RAW_SETTINGS_KEY,
+                    SETTINGS_CHARACTERISTIC_UUID, SETTINGS_FIELD_NAMES)
 from bleak_retry_connector import BleakClientWithServiceCache
 from .glance_pb2 import Settings, ForecastScene  # type: ignore
 
@@ -310,18 +311,7 @@ class GlanceClockNotificationService(BaseNotificationService):
                 _LOGGER.debug(f"  Protobuf attempt: {protobuf_data.hex()}")
                 return None
 
-            # Convert to dictionary
-            settings_dict = {
-                "nightModeEnabled": settings.nightModeEnabled,
-                "pointsAlwaysEnabled": settings.pointsAlwaysEnabled,
-                "displayBrightness": settings.displayBrightness,
-                "timeModeEnable": settings.timeModeEnable,
-                "timeFormat12": settings.timeFormat12,
-                "permanentDND": settings.permanentDND,
-                "permanentMute": settings.permanentMute,
-                "dateFormat": settings.dateFormat,
-                "mgrUserActivityTimeout": settings.mgrUserActivityTimeout,
-            }
+            settings_dict = self._settings_to_dict(settings, protobuf_data)
 
             _LOGGER.debug("Successfully read settings from device")
 
@@ -334,6 +324,32 @@ class GlanceClockNotificationService(BaseNotificationService):
         except Exception as e:
             _LOGGER.debug(f"Could not read settings from device: {e}")
             return None
+
+    @staticmethod
+    def _settings_to_dict(settings, raw: bytes) -> dict:
+        """Decode a Settings message into the dict the entities consume.
+
+        The raw bytes travel with it because a write has to patch the device's
+        own message rather than rebuild it -- see async_write_settings.
+        """
+        has_dnd = settings.HasField("dnd")
+        return {
+            "nightModeEnabled": settings.nightModeEnabled,
+            "pointsAlwaysEnabled": settings.pointsAlwaysEnabled,
+            "displayBrightness": settings.displayBrightness,
+            "timeModeEnable": settings.timeModeEnable,
+            "timeFormat12": settings.timeFormat12,
+            "permanentDND": settings.permanentDND,
+            "permanentMute": settings.permanentMute,
+            "dateFormat": settings.dateFormat,
+            "mgrUserActivityTimeout": settings.mgrUserActivityTimeout,
+            # None means no schedule is stored at all, which is different from
+            # a schedule of 00:00-00:00.
+            "dndRecurring": settings.dnd.recurring if has_dnd else None,
+            "dndFromHour": settings.dnd.fromHour if has_dnd else None,
+            "dndTillHour": settings.dnd.tillHour if has_dnd else None,
+            RAW_SETTINGS_KEY: bytes(raw),
+        }
 
     async def async_read_current_settings_safe(self) -> dict | None:
         """Safe wrapper for reading settings."""
@@ -424,27 +440,60 @@ class GlanceClockNotificationService(BaseNotificationService):
                     "permanentDND": False,
                     "permanentMute": False,
                     "dateFormat": 0,
-                    "mgrUserActivityTimeout": 600,
+                    # mgrUserActivityTimeout is deliberately absent. Devices
+                    # that do not report it use a firmware default; writing an
+                    # explicit value here has been observed to stop the rim
+                    # points staying lit.
                 }
                 _LOGGER.debug("Using default settings as base")
 
-            # Update only the specified settings
-            updated_settings = current_settings.copy()
-            updated_settings.update(settings_data)
-
-            # Create protobuf Settings message
             settings = Settings()
-            
-            # Map the dictionary to protobuf fields
-            settings.nightModeEnabled = updated_settings.get("nightModeEnabled", True)
-            settings.pointsAlwaysEnabled = updated_settings.get("pointsAlwaysEnabled", False)
-            settings.displayBrightness = updated_settings.get("displayBrightness", 128)
-            settings.timeModeEnable = updated_settings.get("timeModeEnable", True)
-            settings.timeFormat12 = updated_settings.get("timeFormat12", False)
-            settings.permanentDND = updated_settings.get("permanentDND", False)
-            settings.permanentMute = updated_settings.get("permanentMute", False)
-            settings.dateFormat = updated_settings.get("dateFormat", 0)
-            settings.mgrUserActivityTimeout = updated_settings.get("mgrUserActivityTimeout", 600)
+
+            raw_settings = current_settings.get(RAW_SETTINGS_KEY)
+            if raw_settings:
+                # Start from the device's own message rather than a blank one.
+                # Parsing preserves every field it contains, including the
+                # nested DND schedule and any field this schema does not know
+                # about, and re-serialising is byte-identical when nothing is
+                # changed. Building a fresh Settings() instead would drop them.
+                settings.ParseFromString(raw_settings)
+            else:
+                # No successful read to build on. Fall back to the previous
+                # behaviour, but only for the fields we actually have values
+                # for -- writing defaults for the rest is what corrupted
+                # devices before.
+                _LOGGER.warning(
+                    "Writing settings without a prior read; fields not modelled "
+                    "by this integration cannot be preserved"
+                )
+                for key in SETTINGS_FIELD_NAMES:
+                    if key in current_settings:
+                        setattr(settings, key, current_settings[key])
+
+            # Apply only what the caller asked to change.
+            dnd_changes = {
+                DND_FIELD_NAMES[key]: value
+                for key, value in settings_data.items()
+                if key in DND_FIELD_NAMES
+            }
+            for key, value in settings_data.items():
+                if key in DND_FIELD_NAMES:
+                    continue
+                if key not in SETTINGS_FIELD_NAMES:
+                    _LOGGER.warning("Ignoring unknown setting %s", key)
+                    continue
+                setattr(settings, key, value)
+
+            if dnd_changes:
+                # All three DND fields are `required` in the schema, so a
+                # partially populated submessage will not serialise. When the
+                # device has no schedule yet, fill the gaps rather than fail.
+                if not settings.HasField("dnd"):
+                    dnd_changes.setdefault("recurring", True)
+                    dnd_changes.setdefault("fromHour", 0)
+                    dnd_changes.setdefault("tillHour", 0)
+                for field, value in dnd_changes.items():
+                    setattr(settings.dnd, field, value)
 
             # Serialize the settings
             settings_bytes = settings.SerializeToString()
@@ -460,7 +509,16 @@ class GlanceClockNotificationService(BaseNotificationService):
             
             if success:
                 _LOGGER.info("Settings written successfully")
-                
+
+                # Make the cache reflect what was just written. Without this the
+                # next write within the cache lifetime starts from pre-write
+                # bytes and silently reverts this change -- two settings changed
+                # in quick succession would fight each other.
+                if self._connection_manager:
+                    self._connection_manager.cache_settings(
+                        self._settings_to_dict(settings, settings_bytes)
+                    )
+
                 # If this was a brightness change, schedule brightness scene stop after 3 seconds
                 # (like the web app does)
                 if is_brightness_change:
@@ -493,7 +551,8 @@ class GlanceClockNotificationService(BaseNotificationService):
         min_color: int,
         values: bytes,
         start_timestamp: int,
-        template: bytes | None = None
+        template: bytes | None = None,
+        unit: str = "C",
     ) -> bool:
         """Send weather forecast data to the Glance Clock."""
         if not self._connection_manager or not self._connection_manager.is_connected:
@@ -510,12 +569,18 @@ class GlanceClockNotificationService(BaseNotificationService):
             _LOGGER.info(f"Min color: 0x{min_color:06X} ({min_color})")
             _LOGGER.info(f"Temperature values ({len(values)} bytes): {values.hex()}")
             
-            # Default template matching web project: thermometer icon + current value + °C
+            # Thermometer icon, the current value, then the degree sign and the
+            # unit letter. Home Assistant has already converted the numbers to
+            # whatever the user's system uses, so only the letter changes here --
+            # converting again would double-convert.
             if template is None:
-                # Template: [194, 143, 8, 194, 176, 67] = thermometer icon + value placeholder + °C
-                default_template = bytes([194, 143, 8, 194, 176, 67])  # 67 = 'C'
+                letter = ord("F") if str(unit).upper().endswith("F") else ord("C")
+                default_template = bytes([194, 143, 8, 194, 176, letter])
                 template = default_template
-                _LOGGER.info(f"Using default template: {template.hex()}")
+                _LOGGER.info(
+                    "Using default template in degrees %s: %s",
+                    chr(letter), template.hex(),
+                )
             else:
                 _LOGGER.info(f"Using custom template ({len(template)} bytes): {template.hex()}")
             

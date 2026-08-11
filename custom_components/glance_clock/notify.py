@@ -374,6 +374,71 @@ class GlanceClockNotificationService(BaseNotificationService):
             _LOGGER.error(f"Error sending custom scene: {e}")
             return False
 
+    async def async_send_animation(
+        self,
+        animation: str,
+        segment: int,
+        speed: int = 3,
+        mode: int = 8,
+        slot: int = 0,
+        life_time: int = 2500,
+        back_color: int = 12,
+    ) -> bool:
+        """Run one of the firmware animations on the LED rings.
+
+        The firmware animations are single-colour patterns tinted by the colour
+        packed into `segment`; a colour of 0 is black and renders nothing.
+        """
+        if not self._connection_manager or not self._connection_manager.is_connected:
+            _LOGGER.warning("Device not connected, cannot send animation")
+            return False
+
+        try:
+            from .glance_pb2 import CustomScene  # type: ignore
+            from .utils.led_utils import (
+                ANIMATION_SWEEP,
+                GIF_ANIMATIONS,
+                METHOD_GIF,
+                METHOD_MOVING_BAR,
+            )
+
+            scene = CustomScene()
+            obj = scene.object.add()
+            obj.startTime = 0
+            obj.lifeTime = life_time
+
+            if animation == ANIMATION_SWEEP:
+                obj.method = METHOD_MOVING_BAR
+                obj.movingBar.area = segment
+                # The sweep takes its colour from the bar, not the area. Only
+                # the front colour is drawn -- the back colour is not rendered.
+                obj.movingBar.frontColor = (segment >> 16) & 0x3F
+                obj.movingBar.backColor = back_color
+                obj.movingBar.speed = speed
+            else:
+                obj.method = METHOD_GIF
+                obj.gif.type = GIF_ANIMATIONS[animation]
+                obj.gif.segment = segment
+                obj.gif.speed = speed
+
+            command = bytes([0, 0, mode, slot]) + scene.SerializeToString()
+
+            _LOGGER.info(
+                "Sending animation '%s' at speed %d, mode %d, slot %d",
+                animation, speed, mode, slot,
+            )
+            _LOGGER.debug("Animation command: %s", command.hex())
+
+            if await self._connection_manager.send_command(command):
+                _LOGGER.info("Animation sent successfully")
+                return True
+
+            _LOGGER.error("Failed to send animation command")
+            return False
+        except Exception as e:
+            _LOGGER.error(f"Error sending animation: {e}")
+            return False
+
     async def async_delete_scene(self, slot: int = 0) -> bool:
         """Remove the scene stored in one slot."""
         if not self._connection_manager or not self._connection_manager.is_connected:

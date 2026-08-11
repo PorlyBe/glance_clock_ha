@@ -372,3 +372,111 @@ clear_leds:
           min: 0
           max: 7
           mode: box
+
+set_animation:
+  name: Set animation
+  description: >-
+    Run one of the animations built into the clock's firmware on the LED rings. They
+    are single-colour patterns tinted by the colour you pick.
+  fields:
+    animation:
+      name: Animation
+      description: >-
+        'sweep' fills the area from its start pixel, pauses and repeats; its speed sign
+        sets the direction. The rest are firmware effects.
+      default: fire
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - sweep
+            - fire
+            - wheel
+            - flower
+            - flower2
+            - fan
+            - sun
+            - thunderstorm
+            - cloud
+    color:
+      name: Colour
+      description: Colour name from the clock's palette. Black renders nothing.
+      default: white
+      selector:
+        text:
+    speed:
+      name: Speed
+      description: >-
+        0-10 for the firmware animations. 'sweep' takes -10 to 10, where a negative
+        value runs anticlockwise.
+      default: 3
+      selector:
+        number:
+          min: -10
+          max: 10
+          mode: slider
+    start:
+      name: Start pixel
+      description: 0-47, clockwise from twelve o'clock.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 47
+          mode: box
+    length:
+      name: Length
+      description: >-
+        Pixels to cover. The firmware animations only render multiples of 8 and round
+        anything else down.
+      default: 48
+      selector:
+        number:
+          min: 1
+          max: 48
+          mode: box
+    ring:
+      name: Ring
+      description: 0-3, counted from the outer edge.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 3
+          mode: box
+    rings_tall:
+      name: Rings tall
+      description: How many rings the animation covers.
+      default: 4
+      selector:
+        number:
+          min: 1
+          max: 4
+          mode: box
+    mode:
+      name: Display mode
+      default: watchface
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - watchface
+            - exclusive
+            - ring_and_text
+    slot:
+      name: Scene slot
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 7
+          mode: box
+    life_time:
+      name: Lifetime
+      description: Frames at 50 FPS that the animation runs for.
+      default: 2500
+      selector:
+        number:
+          min: 1
+          max: 30000
+          mode: box

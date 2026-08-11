@@ -33,8 +33,33 @@ DISPLAY_MODES = {
     "ring_and_text": 24,
 }
 
-#: Object.method value for a fill.
+#: Object.method values.
 METHOD_FILL = 2
+METHOD_MOVING_BAR = 5
+METHOD_GIF = 8
+
+#: Animations built into the firmware, drawn as a GIF object. They are
+#: single-colour patterns tinted by the colour in the segment -- a colour of 0
+#: is black, which renders nothing at all.
+GIF_ANIMATIONS = {
+    "fire": 10,
+    "wheel": 11,
+    "flower": 12,
+    "flower2": 13,
+    "fan": 14,
+    "sun": 15,
+    "thunderstorm": 16,
+    "cloud": 17,
+}
+
+#: A sweep that fills the area from its start pixel, pauses, and repeats.
+#: Not a GIF -- it is a MovingBar, and its speed carries the direction.
+ANIMATION_SWEEP = "sweep"
+
+ANIMATIONS = (ANIMATION_SWEEP, *GIF_ANIMATIONS)
+
+#: Lengths that are not a multiple of 8 are rounded down by the clock itself.
+GIF_LENGTH_MULTIPLE = 8
 
 
 def resolve_color(color) -> int:
@@ -114,6 +139,35 @@ def segments_from_config(items: list[dict]) -> list[int]:
             )
         )
     return packed
+
+
+def resolve_animation(name) -> str:
+    """Validate an animation name."""
+    key = str(name).strip().lower()
+    if key not in ANIMATIONS:
+        raise ValueError(
+            f"unknown animation '{name}'; expected one of {', '.join(sorted(ANIMATIONS))}"
+        )
+    return key
+
+
+def check_speed(animation: str, speed: int) -> int:
+    """Range-check speed, which means different things per animation.
+
+    A sweep takes -10 to 10, where the sign is the direction. The firmware
+    animations take 0 to 10 and have no direction, so a negative value there is
+    a mistake worth naming rather than silently clamping.
+    """
+    speed = int(speed)
+    if animation == ANIMATION_SWEEP:
+        if not -10 <= speed <= 10:
+            raise ValueError("sweep speed must be -10 to 10")
+    elif not 0 <= speed <= 10:
+        raise ValueError(
+            f"'{animation}' speed must be 0-10; only 'sweep' uses negative "
+            "values, where the sign reverses direction"
+        )
+    return speed
 
 
 def resolve_mode(mode) -> int:

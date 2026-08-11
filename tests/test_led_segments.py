@@ -126,3 +126,47 @@ def test_segments_from_config_rejects_incomplete_entries() -> None:
         segments_from_config([{"start": 0}])
     with pytest.raises(ValueError, match="at least one segment"):
         segments_from_config([])
+
+
+ANIMATION_SWEEP = led_utils.ANIMATION_SWEEP
+GIF_ANIMATIONS = led_utils.GIF_ANIMATIONS
+check_speed = led_utils.check_speed
+resolve_animation = led_utils.resolve_animation
+
+
+def test_the_frame_that_ran_fire_in_red() -> None:
+    """Full ring, all four rings deep, red -- verified on hardware."""
+    assert pack_segment(0, "red", length=48, ring=0, rings_tall=4) == 388864
+
+
+def test_the_purple_fire_matches_the_schema_default() -> None:
+    """The first attempt rendered nothing because the colour defaulted to black.
+
+    The schema's own default carries BlueViolet, which is why substituting it
+    made the animation appear.
+    """
+    assert pack_segment(0, "blue_violet", length=48, ring=0, rings_tall=4) == 782080
+    assert pack_segment(0, "black", length=48, ring=0, rings_tall=4) >> 16 == 0
+
+
+def test_every_firmware_animation_has_a_type() -> None:
+    assert GIF_ANIMATIONS == {
+        "fire": 10, "wheel": 11, "flower": 12, "flower2": 13,
+        "fan": 14, "sun": 15, "thunderstorm": 16, "cloud": 17,
+    }
+
+
+def test_animation_names_are_validated() -> None:
+    assert resolve_animation("Fire") == "fire"
+    assert resolve_animation("sweep") == ANIMATION_SWEEP
+    with pytest.raises(ValueError, match="unknown animation"):
+        resolve_animation("explosion")
+
+
+def test_only_the_sweep_accepts_a_direction() -> None:
+    assert check_speed(ANIMATION_SWEEP, -3) == -3
+    assert check_speed("fire", 10) == 10
+    with pytest.raises(ValueError, match="only 'sweep' uses negative"):
+        check_speed("fire", -3)
+    with pytest.raises(ValueError, match="sweep speed"):
+        check_speed(ANIMATION_SWEEP, 11)

@@ -219,6 +219,8 @@ refresh_entities:
 
 send_forecast:
   name: "Send Weather Forecast"
+  # Writes to scene slot 1. Remove it again with clear_leds and slot 1 -- a
+  # scene stays in its slot and replays until something clears it.
   description: "Send 24-hour weather forecast data to the Glance Clock with color gradient support"
   fields:
     weather_entity:

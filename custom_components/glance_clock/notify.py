@@ -551,7 +551,8 @@ class GlanceClockNotificationService(BaseNotificationService):
         min_color: int,
         values: bytes,
         start_timestamp: int,
-        template: bytes | None = None
+        template: bytes | None = None,
+        unit: str = "C",
     ) -> bool:
         """Send weather forecast data to the Glance Clock."""
         if not self._connection_manager or not self._connection_manager.is_connected:
@@ -568,12 +569,18 @@ class GlanceClockNotificationService(BaseNotificationService):
             _LOGGER.info(f"Min color: 0x{min_color:06X} ({min_color})")
             _LOGGER.info(f"Temperature values ({len(values)} bytes): {values.hex()}")
             
-            # Default template matching web project: thermometer icon + current value + °C
+            # Thermometer icon, the current value, then the degree sign and the
+            # unit letter. Home Assistant has already converted the numbers to
+            # whatever the user's system uses, so only the letter changes here --
+            # converting again would double-convert.
             if template is None:
-                # Template: [194, 143, 8, 194, 176, 67] = thermometer icon + value placeholder + °C
-                default_template = bytes([194, 143, 8, 194, 176, 67])  # 67 = 'C'
+                letter = ord("F") if str(unit).upper().endswith("F") else ord("C")
+                default_template = bytes([194, 143, 8, 194, 176, letter])
                 template = default_template
-                _LOGGER.info(f"Using default template: {template.hex()}")
+                _LOGGER.info(
+                    "Using default template in degrees %s: %s",
+                    chr(letter), template.hex(),
+                )
             else:
                 _LOGGER.info(f"Using custom template ({len(template)} bytes): {template.hex()}")
             

@@ -675,7 +675,10 @@ read_characteristic:
   fields:
     characteristic:
       name: Characteristic
-      description: One of settings, scene_data, scene_state, or a full UUID.
+      description: >-
+        One of settings, scene_data, scene_state, or a full UUID. Use "list" to
+        enumerate every service and characteristic the clock exposes, with the
+        properties each one supports.
       required: false
       default: settings
       example: scene_state

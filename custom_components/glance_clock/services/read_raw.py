@@ -31,6 +31,47 @@ KNOWN_CHARACTERISTICS = {
 }
 
 
+def _describe_gatt(connection_manager) -> dict:
+    """Enumerate every service and characteristic, with what each one supports.
+
+    The properties are the point. Whether the clock can push anything at all --
+    a button press, a timer expiring -- comes down to whether some
+    characteristic carries notify or indicate, and nothing we have documents
+    that. Reading it off the device settles it without writing a listener first.
+    """
+    client = connection_manager.client
+    if not client:
+        raise ServiceValidationError("read_characteristic: no BLE client")
+
+    services = []
+    for service in client.services:
+        chars = []
+        for char in service.characteristics:
+            chars.append(
+                {
+                    "uuid": str(char.uuid),
+                    "handle": char.handle,
+                    "properties": sorted(char.properties),
+                    "descriptors": [str(d.uuid) for d in char.descriptors],
+                }
+            )
+        services.append(
+            {
+                "uuid": str(service.uuid),
+                "description": service.description,
+                "characteristics": chars,
+            }
+        )
+
+    notifiable = [
+        c["uuid"]
+        for s in services
+        for c in s["characteristics"]
+        if "notify" in c["properties"] or "indicate" in c["properties"]
+    ]
+    return {"services": services, "notifiable": notifiable}
+
+
 async def handle_read_characteristic(
     hass: HomeAssistant, entry: ConfigEntry, call: ServiceCall
 ) -> dict:
@@ -42,6 +83,10 @@ async def handle_read_characteristic(
         raise ServiceValidationError("read_characteristic: device not connected")
 
     name = str(call.data.get("characteristic", "settings")).strip().lower()
+
+    if name == "list":
+        return _describe_gatt(connection_manager)
+
     uuid = KNOWN_CHARACTERISTICS.get(name)
     if uuid is None:
         if "-" in name:

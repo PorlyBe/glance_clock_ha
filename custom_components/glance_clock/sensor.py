@@ -13,6 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 
@@ -382,6 +383,10 @@ class GlanceClockLastNotificationSensor(SensorEntity):
         self._attr_unique_id = f"{mac_address}_last_notification"
         self._attr_should_poll = False
         self._latest = None
+        # Identical pushes are common -- the clock repeats itself -- and a
+        # sensor that only records changes hides them completely. The counter
+        # makes every push visible, which is the whole point of the entity.
+        self._count = 0
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -398,10 +403,14 @@ class GlanceClockLastNotificationSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        """Say which characteristic it came from, which narrows what it means."""
+        """Say where it came from, when, and how many have arrived."""
         if not self._latest:
             return {}
-        return {"characteristic": self._latest["characteristic"]}
+        return {
+            "characteristic": self._latest["characteristic"],
+            "received_at": self._latest["received_at"],
+            "count": self._count,
+        }
 
     async def async_added_to_hass(self) -> None:
         """Start listening for the clock's own messages."""
@@ -411,9 +420,11 @@ class GlanceClockLastNotificationSensor(SensorEntity):
         def _handle(event):
             if event.data.get("address") != self._mac_address:
                 return
+            self._count += 1
             self._latest = {
                 "hex": event.data.get("hex"),
                 "characteristic": event.data.get("characteristic"),
+                "received_at": dt_util.utcnow().isoformat(),
             }
             self.async_write_ha_state()
 

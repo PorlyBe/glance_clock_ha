@@ -12,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.entity import EntityCategory
 
 from .const import DOMAIN
 
@@ -49,6 +50,11 @@ async def async_setup_entry(
         mac_address, name, connection_manager, entry
     )
     entities.append(battery_sensor)
+
+    entities.append(
+        GlanceClockLastNotificationSensor(
+            mac_address, name, connection_manager, entry)
+    )
 
     async_add_entities(entities)
     _LOGGER.info(f"✅ Added {len(entities)} sensor entities for {name}")
@@ -353,3 +359,64 @@ class GlanceClockBatterySensor(SensorEntity):
         # Update device info only if we haven't successfully read it yet
         if not self._device_info_read:
             await self._update_device_info()
+
+
+class GlanceClockLastNotificationSensor(SensorEntity):
+    """The most recent thing the clock said on its own.
+
+    Both Glance characteristics carry the notify property, but nothing
+    documents what the clock pushes or when. This makes that visible without
+    sitting in the event bus waiting: press the clock's button, let a timer
+    expire, and watch whether anything lands here.
+    """
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:message-arrow-right-outline"
+
+    def __init__(self, mac_address, device_name, connection_manager, entry):
+        """Initialize the last notification sensor."""
+        self._mac_address = mac_address
+        self._connection_manager = connection_manager
+        self._entry = entry
+        self._attr_name = f"{device_name} Last Notification"
+        self._attr_unique_id = f"{mac_address}_last_notification"
+        self._attr_should_poll = False
+        self._latest = None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._mac_address)},
+            connections={("bluetooth", self._mac_address)},
+        )
+
+    @property
+    def native_value(self):
+        """Return the hex of the last push, or None if the clock has said nothing."""
+        return self._latest["hex"] if self._latest else None
+
+    @property
+    def extra_state_attributes(self):
+        """Say which characteristic it came from, which narrows what it means."""
+        if not self._latest:
+            return {}
+        return {"characteristic": self._latest["characteristic"]}
+
+    async def async_added_to_hass(self) -> None:
+        """Start listening for the clock's own messages."""
+        await super().async_added_to_hass()
+
+        @callback
+        def _handle(event):
+            if event.data.get("address") != self._mac_address:
+                return
+            self._latest = {
+                "hex": event.data.get("hex"),
+                "characteristic": event.data.get("characteristic"),
+            }
+            self.async_write_ha_state()
+
+        self.async_on_remove(
+            self.hass.bus.async_listen("glance_clock_notification", _handle)
+        )

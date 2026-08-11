@@ -5,7 +5,21 @@ from homeassistant.core import HomeAssistant
 from homeassistant.components import bluetooth
 from bleak_retry_connector import establish_connection, BleakClientWithServiceCache
 
-from ..const import GLANCE_CHARACTERISTIC_UUID
+from ..const import (
+    GLANCE_CHARACTERISTIC_UUID,
+    SCENE_DATA_CHARACTERISTIC_UUID,
+    SCENE_STATE_DATA_CHARACTERISTIC_UUID,
+)
+
+#: Fired whenever the clock pushes something. Both Glance characteristics
+#: carry the notify property, so the clock can speak first -- what it says is
+#: undocumented, and this is how we find out.
+EVENT_NOTIFICATION = "glance_clock_notification"
+
+NOTIFIABLE_CHARACTERISTICS = {
+    SCENE_STATE_DATA_CHARACTERISTIC_UUID: "scene_state",
+    SCENE_DATA_CHARACTERISTIC_UUID: "scene_data",
+}
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +37,8 @@ class GlanceClockConnectionManager:
         """
         self.hass = hass
         self.mac_address = mac_address
+        #: Most recent push from the clock, or None if it has never spoken.
+        self.last_notification = None
         self.name = name
         self.client = None
         self._connection_task = None
@@ -219,6 +235,7 @@ class GlanceClockConnectionManager:
             if self.client and self.client.is_connected:
                 _LOGGER.info(f"Successfully connected to {self.name}")
                 self._reconnect_attempts = 0
+                await self._subscribe_notifications()
                 await self._notify_connection_callbacks()
             else:
                 raise Exception("Failed to establish connection")
@@ -313,6 +330,37 @@ class GlanceClockConnectionManager:
             _LOGGER.error(f"Failed to send command to {self.name}: {e}")
             await self._disconnect()
             return False
+
+    async def _subscribe_notifications(self):
+        """Listen to whatever the clock pushes on its two Glance characteristics.
+
+        Subscribing is best-effort: a clock that refuses is not a broken
+        connection, and everything else works without it.
+        """
+        for uuid, name in NOTIFIABLE_CHARACTERISTICS.items():
+            try:
+                await self.client.start_notify(
+                    uuid,
+                    lambda _char, data, name=name: self._on_notification(name, data),
+                )
+                _LOGGER.info("Listening for notifications on %s", name)
+            except Exception as err:  # noqa: BLE001 -- bleak raises broadly here
+                _LOGGER.debug("Could not subscribe to %s: %s", name, err)
+
+    def _on_notification(self, name: str, data: bytearray):
+        """Publish one notification from the clock as a Home Assistant event."""
+        payload = bytes(data)
+        self.last_notification = {"characteristic": name, "hex": payload.hex()}
+        _LOGGER.info("Clock pushed on %s: %s", name, payload.hex())
+        self.hass.bus.async_fire(
+            EVENT_NOTIFICATION,
+            {
+                "address": self.mac_address,
+                "characteristic": name,
+                "hex": payload.hex(),
+                "bytes": list(payload),
+            },
+        )
 
     async def read_characteristic(self, characteristic_uuid: str | None = None) -> bytes:
         """Read data from a characteristic.

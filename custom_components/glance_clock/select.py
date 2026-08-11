@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .animation_state import get_animation_state
-from .const import COLORS, DOMAIN
+from .const import COLORS, DOMAIN, SOUNDS
 from .entity import GlanceClockEntity
 from .utils.led_utils import ANIMATIONS
 
@@ -43,6 +43,7 @@ async def async_setup_entry(
         GlanceClockDateFormatSelect(config_entry, mac_address, name, connection_manager),
         GlanceClockAnimationSelect(config_entry, mac_address, name, connection_manager),
         GlanceClockAnimationColorSelect(config_entry, mac_address, name, connection_manager),
+        GlanceClockSoundSelect(config_entry, mac_address, name, connection_manager),
     ]
 
     async_add_entities(entities)
@@ -223,3 +224,21 @@ class GlanceClockAnimationColorSelect(GlanceClockAnimationChoice):
         self._attr_name = f"{device_name} Animation Colour"
         self._attr_unique_id = f"{mac_address}_animation_color"
         self._attr_icon = "mdi:palette"
+
+
+class GlanceClockSoundSelect(GlanceClockAnimationChoice):
+    """Which sound the Play Sound button plays.
+
+    The clock has eighteen of them and their names say little about how they
+    sound, so being able to step through them from the UI beats guessing.
+    """
+
+    _state_key = "sound"
+    _attr_options = sorted(SOUNDS)
+
+    def __init__(self, config_entry, mac_address, device_name, connection_manager):
+        """Initialize the sound select."""
+        super().__init__(config_entry, mac_address, device_name, connection_manager)
+        self._attr_name = f"{device_name} Sound"
+        self._attr_unique_id = f"{mac_address}_sound"
+        self._attr_icon = "mdi:music-note"

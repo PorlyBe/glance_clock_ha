@@ -20,6 +20,7 @@ DEFAULTS = {
     # which looks exactly like a broken integration.
     "color": "white",
     "speed": 3,
+    "sound": "bells",
 }
 
 

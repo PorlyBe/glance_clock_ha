@@ -49,6 +49,8 @@ async def async_setup_entry(
                 config_entry, mac_address, name, connection_manager),
             GlanceClockStopAnimationButton(
                 config_entry, mac_address, name, connection_manager),
+            GlanceClockPlaySoundButton(
+                config_entry, mac_address, name, connection_manager),
         ]
     )
 
@@ -124,12 +126,16 @@ ANIMATION_MODE = 8
 
 
 class GlanceClockRunAnimationButton(GlanceClockEntity, ButtonEntity):
-    """Send the animation chosen by the animation selects and speed slider."""
+    """Send the animation chosen by the animation selects and speed slider.
+
+    Named "Animation Run" rather than "Run Animation" so all the animation
+    controls sort together in the UI.
+    """
 
     def __init__(self, config_entry, mac_address, device_name, connection_manager):
         """Initialize the run animation button."""
         super().__init__(config_entry, mac_address, device_name, connection_manager)
-        self._attr_name = f"{device_name} Run Animation"
+        self._attr_name = f"{device_name} Animation Run"
         self._attr_unique_id = f"{mac_address}_run_animation"
         self._attr_icon = "mdi:play-circle-outline"
 
@@ -183,7 +189,7 @@ class GlanceClockStopAnimationButton(GlanceClockEntity, ButtonEntity):
     def __init__(self, config_entry, mac_address, device_name, connection_manager):
         """Initialize the stop animation button."""
         super().__init__(config_entry, mac_address, device_name, connection_manager)
-        self._attr_name = f"{device_name} Stop Animation"
+        self._attr_name = f"{device_name} Animation Stop"
         self._attr_unique_id = f"{mac_address}_stop_animation"
         self._attr_icon = "mdi:stop-circle-outline"
 
@@ -205,3 +211,50 @@ class GlanceClockStopAnimationButton(GlanceClockEntity, ButtonEntity):
             notify_service._connection_manager = self._connection_manager
 
         await notify_service.async_delete_scene(ANIMATION_SLOT)
+
+
+class GlanceClockPlaySoundButton(GlanceClockEntity, ButtonEntity):
+    """Play the sound chosen by the Sound select.
+
+    Sent as a notice rather than a scene: notices are immediate, while a scene
+    only takes effect on the clock's roughly 15 second cycle -- useless for
+    auditioning sounds. The sound's name is shown while it plays, so stepping
+    through the list tells you which is which.
+    """
+
+    def __init__(self, config_entry, mac_address, device_name, connection_manager):
+        """Initialize the play sound button."""
+        super().__init__(config_entry, mac_address, device_name, connection_manager)
+        self._attr_name = f"{device_name} Sound Play"
+        self._attr_unique_id = f"{mac_address}_play_sound"
+        self._attr_icon = "mdi:play-speed"
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self._connection_manager.is_connected
+
+    async def async_press(self) -> None:
+        """Play the selected sound."""
+        from .const import SOUNDS
+
+        name = get_animation_state(self.hass, self._config_entry.entry_id)["sound"]
+        if name not in SOUNDS:
+            _LOGGER.error("Unknown sound '%s'", name)
+            return
+
+        notify_service = self.hass.data.get(DOMAIN + "_notify", {}).get(
+            self._config_entry.entry_id
+        )
+        if not notify_service:
+            _LOGGER.error("Notification service not available for sounds")
+            return
+
+        if self._connection_manager and not hasattr(notify_service, "_connection_manager"):
+            notify_service._connection_manager = self._connection_manager
+
+        await notify_service.async_send_notice(
+            text=name.replace("_", " ").upper(),
+            animation=0,   # no ring animation; this is about the sound
+            sound=SOUNDS[name],
+        )

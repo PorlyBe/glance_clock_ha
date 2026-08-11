@@ -13,6 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [
     Platform.NOTIFY,
     Platform.SENSOR,
+    Platform.BINARY_SENSOR,
     Platform.SWITCH,
     Platform.LIGHT,
     Platform.SELECT,

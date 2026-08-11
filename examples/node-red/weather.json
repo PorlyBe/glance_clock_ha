@@ -1,0 +1,94 @@
+[
+    {
+        "id": "glance_weather_tab",
+        "type": "tab",
+        "label": "Glance Clock - weather",
+        "disabled": false,
+        "info": "Turns a weather entity into snow, rain or fog on the LED rings.\n\nChange the entity id in the trigger node. Uses scene slot 1, leaving slot 0\nfree for the animation buttons on the device page."
+    },
+    {
+        "id": "gw_trigger",
+        "type": "server-state-changed",
+        "z": "glance_weather_tab",
+        "name": "weather changes",
+        "server": "",
+        "version": 6,
+        "outputs": 1,
+        "exposeAsEntityConfig": "",
+        "entities": {
+            "entity": [
+                "weather.home"
+            ],
+            "substring": [],
+            "regex": []
+        },
+        "outputInitially": true,
+        "stateType": "str",
+        "ignoreCurrentStateUnknown": true,
+        "ignoreCurrentStateUnavailable": true,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "x": 150,
+        "y": 100,
+        "wires": [
+            [
+                "gw_map"
+            ]
+        ]
+    },
+    {
+        "id": "gw_map",
+        "type": "function",
+        "z": "glance_weather_tab",
+        "name": "map to a weather step",
+        "func": "// The clock's weather is a particle effect, not a forecast readout:\n// snow falls, rain streaks, fog drifts. Anything we have no effect for\n// clears the slot so the clock goes back to its normal face.\nconst CONDITIONS = {\n    snowy: { condition: 'snow', intensity: 6 },\n    'snowy-rainy': { condition: 'snow', intensity: 4 },\n    rainy: { condition: 'rain', intensity: 5 },\n    pouring: { condition: 'rain', intensity: 10 },\n    fog: { condition: 'fog', intensity: 6 },\n    hail: { condition: 'snow', intensity: 9 },\n};\n\nconst SLOT = 1;\nconst match = CONDITIONS[msg.payload];\n\nif (!match) {\n    // A scene stays in its slot and replays until cleared -- it does not\n    // expire on its own. Clearing is how weather stops.\n    msg.action = 'glance_clock.clear_leds';\n    msg.payload = { slot: SLOT };\n    return msg;\n}\n\nmsg.action = 'glance_clock.set_scene';\nmsg.payload = {\n    mode: 'watchface',\n    slot: SLOT,\n    steps: [\n        {\n            type: 'weather',\n            condition: match.condition,\n            position: 'full',\n            intensity: match.intensity,\n            seconds: 60,\n        },\n    ],\n};\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 100,
+        "wires": [
+            [
+                "gw_call"
+            ]
+        ]
+    },
+    {
+        "id": "gw_call",
+        "type": "api-call-service",
+        "z": "glance_weather_tab",
+        "name": "send to the clock",
+        "server": "",
+        "version": 7,
+        "debugenabled": false,
+        "action": "",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "",
+        "dataType": "jsonata",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "domain": "",
+        "service": "",
+        "x": 620,
+        "y": 100,
+        "wires": [
+            []
+        ]
+    }
+]

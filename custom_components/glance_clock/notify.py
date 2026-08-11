@@ -11,6 +11,41 @@ from .glance_pb2 import Settings, ForecastScene  # type: ignore
 _LOGGER = logging.getLogger(__name__)
 
 
+def text_with_icons_to_bytes(text: str) -> bytes:
+    """Encode display text, expanding [icon:CODE] markers.
+
+    The matrix font is a single byte per glyph, so ASCII is masked to 7 bits and
+    icons are inserted as their raw charcode.
+    """
+    import re
+
+    parts = []
+    last_index = 0
+    for match in re.finditer(r"\[icon:(\d+)\]", text):
+        for char in text[last_index:match.start()]:
+            parts.append(ord(char) & 0x7F)
+        parts.append(int(match.group(1)) & 0xFF)
+        last_index = match.end()
+    for char in text[last_index:]:
+        parts.append(ord(char) & 0x7F)
+    return bytes(parts)
+
+
+def _resolve_sound(value) -> int:
+    """Accept a sound name from SOUNDS or a raw index."""
+    from .const import SOUNDS
+
+    if isinstance(value, str):
+        key = value.strip().lower()
+        if key not in SOUNDS:
+            raise ValueError(
+                f"unknown sound '{value}'; expected one of {', '.join(sorted(SOUNDS))}"
+            )
+        return SOUNDS[key]
+    return int(value)
+
+
+
 class CharacteristicMissingError(Exception):
     """Raised when a required characteristic is missing."""
     pass
@@ -29,19 +64,6 @@ class GlanceClockNotificationService(BaseNotificationService):
             import struct
             import time
             import re
-
-            def text_with_icons_to_bytes(text: str) -> bytes:
-                icon_regex = re.compile(r"\[icon:(\d+)\]")
-                parts = []
-                last_index = 0
-                for match in icon_regex.finditer(text):
-                    for c in text[last_index:match.start()]:
-                        parts.append(ord(c) & 0x7F)
-                    parts.append(int(match.group(1)))
-                    last_index = match.end()
-                for c in text[last_index:]:
-                    parts.append(ord(c) & 0x7F)
-                return bytes(parts)
 
             # Prepare intervals
             timer_intervals = []
@@ -171,23 +193,6 @@ class GlanceClockNotificationService(BaseNotificationService):
 
         try:
             from .glance_pb2 import Notice, TextData  # type: ignore
-
-            def text_with_icons_to_bytes(text: str) -> bytes:
-                import re
-                icon_regex = re.compile(r"\[icon:(\d+)\]")
-                parts = []
-                last_index = 0
-                for match in icon_regex.finditer(text):
-                    # Add ASCII bytes for text before the icon
-                    for c in text[last_index:match.start()]:
-                        parts.append(ord(c) & 0x7F)
-                    # Add the icon byte
-                    parts.append(int(match.group(1)))
-                    last_index = match.end()
-                # Add remaining text
-                for c in text[last_index:]:
-                    parts.append(ord(c) & 0x7F)
-                return bytes(parts)
 
             # Create TextData for the notice
             text_data = TextData()
@@ -395,13 +400,60 @@ class GlanceClockNotificationService(BaseNotificationService):
             from .glance_pb2 import CustomScene  # type: ignore
             from .utils.led_utils import METHOD_FILL
 
+            from .glance_pb2 import TextData  # type: ignore
+            from .utils.led_utils import (
+                METHOD_AREA_ANIMATION,
+                METHOD_SOUND,
+                METHOD_TEXT,
+                METHOD_WEATHER,
+            )
+
             scene = CustomScene()
             for step in steps:
                 obj = scene.object.add()
-                obj.method = METHOD_FILL
                 obj.startTime = step["at"]
                 obj.lifeTime = step["frames"]
-                obj.fill.segment.extend(step["segments"])
+                kind = step.get("type", "fill")
+
+                if kind == "fill":
+                    obj.method = METHOD_FILL
+                    obj.fill.segment.extend(step["segments"])
+
+                elif kind == "effect":
+                    # Layered onto areas already drawn in this scene; it does
+                    # not draw anything on its own.
+                    obj.method = METHOD_AREA_ANIMATION
+                    obj.areaAnimation.type = step["effect"]
+                    obj.areaAnimation.area.extend(step["segments"])
+                    if step["effect"] == 0 and (
+                        step["rise"] is not None or step["fall"] is not None
+                    ):
+                        obj.areaAnimation.pulse.riseTime = int(step["rise"] or 50)
+                        obj.areaAnimation.pulse.fallTime = int(step["fall"] or 50)
+                    elif step["effect"] == 1 and step["speed"] is not None:
+                        obj.areaAnimation.wave.speed = int(step["speed"])
+                    elif step["effect"] == 2:
+                        if step["color"] is not None:
+                            obj.areaAnimation.flashLight.color = step["color"]
+                        if step["speed"] is not None:
+                            obj.areaAnimation.flashLight.speed = int(step["speed"])
+
+                elif kind == "text":
+                    obj.method = METHOD_TEXT
+                    text_data = TextData()
+                    text_data.modificators = step["scroll"]
+                    text_data.text = text_with_icons_to_bytes(step["text"])
+                    obj.text.append(text_data)
+
+                elif kind == "sound":
+                    obj.method = METHOD_SOUND
+                    obj.sound = _resolve_sound(step["sound"])
+
+                elif kind == "weather":
+                    obj.method = METHOD_WEATHER
+                    obj.weather.condition = step["condition"]
+                    obj.weather.position = step["position"]
+                    obj.weather.intensity = step["intensity"]
 
             command = bytes([0, 0, mode, slot]) + scene.SerializeToString()
 

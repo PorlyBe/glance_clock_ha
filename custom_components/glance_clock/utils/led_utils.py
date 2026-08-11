@@ -144,6 +144,36 @@ def segments_from_config(items: list[dict]) -> list[int]:
 #: The clock plays scenes at this rate, so all times are in fiftieths.
 FRAMES_PER_SECOND = 50
 
+METHOD_SOUND = 3
+METHOD_TEXT = 4
+METHOD_AREA_ANIMATION = 7
+METHOD_WEATHER = 9
+
+#: AreaAnimationData.Type. These are layered onto areas already drawn in the
+#: same scene rather than drawing anything themselves.
+EFFECTS = {"pulse": 0, "wave": 1, "light_flash": 2}
+
+#: WeatherData is a particle effect, not a forecast readout.
+WEATHER_CONDITIONS = {"snow": 0, "rain": 1, "fog": 2}
+WEATHER_POSITIONS = {"full": 0, "upper": 1, "lower": 2}
+
+#: TextData.Modificator -- how the text moves across the matrix.
+TEXT_SCROLL = {"none": 0, "repeat": 1, "rapid": 2, "delay": 3}
+
+STEP_TYPES = ("fill", "effect", "text", "sound", "weather")
+
+
+def _lookup(table: dict, value, what: str) -> int:
+    """Resolve a name from one of the enum tables, or pass an index through."""
+    if isinstance(value, str):
+        key = value.strip().lower()
+        if key not in table:
+            raise ValueError(
+                f"unknown {what} '{value}'; expected one of {', '.join(sorted(table))}"
+            )
+        return table[key]
+    return int(value)
+
 
 def scene_steps_from_config(
     items: list[dict],
@@ -180,19 +210,57 @@ def scene_steps_from_config(
         if at < 0:
             raise ValueError(f"step {index}: 'at' cannot be negative")
 
-        segments = item.get("segments")
-        if segments is None and "start" in item:
-            # A step with a single area can be written flat, without nesting a
-            # one-item list inside it.
-            segments = [item]
+        step_type = str(item.get("type", "fill")).strip().lower()
+        if step_type not in STEP_TYPES:
+            raise ValueError(
+                f"step {index}: unknown type '{step_type}'; expected one of "
+                f"{', '.join(STEP_TYPES)}"
+            )
 
-        steps.append(
-            {
-                "at": at,
-                "frames": frames,
-                "segments": segments_from_config(segments or []),
-            }
-        )
+        step: dict = {"type": step_type, "at": at, "frames": frames}
+
+        if step_type in ("fill", "effect"):
+            segments = item.get("segments")
+            if segments is None and "start" in item:
+                # A step with a single area can be written flat, without
+                # nesting a one-item list inside it.
+                segments = [item]
+            step["segments"] = segments_from_config(segments or [])
+
+        if step_type == "effect":
+            step["effect"] = _lookup(EFFECTS, item.get("effect", "pulse"), "effect")
+            # Each effect reads its own settings and ignores the others, so
+            # carry them all and let the sender attach the relevant one.
+            step["rise"] = item.get("rise")
+            step["fall"] = item.get("fall")
+            step["speed"] = item.get("speed")
+            step["color"] = (
+                resolve_color(item["color"]) if item.get("color") is not None else None
+            )
+        elif step_type == "text":
+            if not item.get("text"):
+                raise ValueError(f"step {index}: a text step needs 'text'")
+            step["text"] = str(item["text"])
+            step["scroll"] = _lookup(
+                TEXT_SCROLL, item.get("scroll", "repeat"), "scroll mode"
+            )
+        elif step_type == "sound":
+            if item.get("sound") is None:
+                raise ValueError(f"step {index}: a sound step needs 'sound'")
+            step["sound"] = item["sound"]
+        elif step_type == "weather":
+            step["condition"] = _lookup(
+                WEATHER_CONDITIONS, item.get("condition", "snow"), "weather condition"
+            )
+            step["position"] = _lookup(
+                WEATHER_POSITIONS, item.get("position", "full"), "weather position"
+            )
+            intensity = int(item.get("intensity", 5))
+            if not 0 <= intensity <= 10:
+                raise ValueError(f"step {index}: intensity must be 0-10")
+            step["intensity"] = intensity
+
+        steps.append(step)
         cursor = at + frames
 
     return steps

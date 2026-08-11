@@ -238,3 +238,65 @@ def test_empty_and_malformed_scenes_are_rejected() -> None:
         scene_steps_from_config([{"frames": 0, "segments": [{"start": 0, "color": "red"}]}])
     with pytest.raises(ValueError, match="cannot be negative"):
         scene_steps_from_config([{"at": -1, "segments": [{"start": 0, "color": "red"}]}])
+
+
+def test_effect_steps_carry_their_own_settings() -> None:
+    steps = scene_steps_from_config(
+        [
+            {
+                "type": "effect",
+                "effect": "pulse",
+                "rise": 20,
+                "fall": 80,
+                "segments": [{"start": 0, "length": 12, "color": "royal_blue"}],
+                "seconds": 3,
+            }
+        ]
+    )
+    assert steps[0]["type"] == "effect"
+    assert steps[0]["effect"] == led_utils.EFFECTS["pulse"]
+    assert (steps[0]["rise"], steps[0]["fall"]) == (20, 80)
+    assert steps[0]["frames"] == 150
+
+
+def test_weather_is_a_particle_effect_not_a_forecast() -> None:
+    """Snow, rain and fog with an intensity -- verified on hardware as drifting dots."""
+    steps = scene_steps_from_config(
+        [{"type": "weather", "condition": "snow", "position": "full",
+          "intensity": 8, "seconds": 15}]
+    )
+    assert steps[0]["condition"] == 0
+    assert steps[0]["position"] == 0
+    assert steps[0]["intensity"] == 8
+    assert steps[0]["frames"] == 750  # a full scene cycle, so it loops seamlessly
+
+
+def test_weather_intensity_is_range_checked() -> None:
+    with pytest.raises(ValueError, match="intensity must be 0-10"):
+        scene_steps_from_config([{"type": "weather", "intensity": 11}])
+
+
+def test_text_and_sound_steps_need_their_payload() -> None:
+    with pytest.raises(ValueError, match="needs 'text'"):
+        scene_steps_from_config([{"type": "text"}])
+    with pytest.raises(ValueError, match="needs 'sound'"):
+        scene_steps_from_config([{"type": "sound"}])
+
+
+def test_text_steps_default_to_scrolling() -> None:
+    steps = scene_steps_from_config([{"type": "text", "text": "Hej"}])
+    assert steps[0]["text"] == "Hej"
+    assert steps[0]["scroll"] == led_utils.TEXT_SCROLL["repeat"]
+
+
+def test_unknown_step_types_are_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown type"):
+        scene_steps_from_config([{"type": "explosion"}])
+
+
+def test_unknown_effect_and_condition_names_are_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown effect"):
+        scene_steps_from_config([{"type": "effect", "effect": "sparkle",
+                                  "segments": [{"start": 0, "color": "red"}]}])
+    with pytest.raises(ValueError, match="unknown weather condition"):
+        scene_steps_from_config([{"type": "weather", "condition": "hail"}])

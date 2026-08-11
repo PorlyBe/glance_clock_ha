@@ -492,10 +492,13 @@ set_scene:
     steps:
       name: Steps
       description: >-
-        List of steps. Each takes 'segments' (same shape as Set LEDs) plus 'frames' or
-        'seconds' for how long it runs, and optionally 'at' to place it on the timeline.
-        Without 'at' a step follows on from the previous one. Anything drawn stays on
-        screen after its step ends, so paint black over what should disappear.
+        List of steps. Every step takes 'frames' or 'seconds' for how long it runs, and
+        optionally 'at' to place it on the timeline; without 'at' a step follows on from
+        the previous one. A step's 'type' is one of: 'fill' (default, takes 'segments'),
+        'effect' (pulse, wave or light_flash, layered onto areas already drawn in this
+        scene), 'text', 'sound', or 'weather' (snow, rain or fog as a particle effect).
+        Anything drawn stays on screen after its step ends, so paint black over what
+        should disappear.
       required: true
       example: |-
         - seconds: 0.5

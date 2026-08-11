@@ -37,7 +37,7 @@ readout: snow falls, rain streaks, fog drifts. The clock draws it.
 service: glance_clock.set_scene
 data:
   mode: watchface
-  slot: 1
+  slot: 2
   steps:
     - type: weather
       condition: snow      # snow, rain or fog
@@ -46,12 +46,14 @@ data:
       seconds: 30
 ```
 
+Slot 2 is deliberate, and the slots are worth keeping straight: slot 0 belongs
+to the animation buttons on the device page, and slot 1 is where
+`send_forecast` writes its temperature graph. Two things sharing a slot means
+whichever arrives second wins.
+
 The flow maps a weather entity's state onto that: `snowy` becomes snow,
 `rainy` and `pouring` become rain, `fog` becomes fog, and anything else clears
 the slot so the clock goes back to normal. Intensity rises with `pouring`.
-
-Slot 1 is deliberate. It leaves slot 0 free for the animation buttons on the
-device page, so weather and a manually run animation do not fight.
 
 ## The espresso machine
 

@@ -300,3 +300,75 @@ read_dnd_schedule:
   description: >-
     Read the Do Not Disturb window currently stored on the clock and write it
     to the Home Assistant log.
+
+set_leds:
+  name: Set LEDs
+  description: >-
+    Light areas of the clock's four LED rings. Each ring has 48 pixels; pixel 0 is at
+    twelve o'clock and numbering runs clockwise. Ring 0 is the outermost.
+  fields:
+    segments:
+      name: Segments
+      description: >-
+        List of areas to light. Each needs 'start' (0-47) and 'color' (a colour name),
+        and may set 'length' (pixels, default 1), 'ring' (0-3, default 0) and
+        'rings_tall' (default 1).
+      required: true
+      example: |-
+        - start: 0
+          length: 12
+          ring: 0
+          color: red
+        - start: 24
+          length: 6
+          ring: 1
+          color: sky_blue
+      selector:
+        object:
+    mode:
+      name: Display mode
+      description: >-
+        How the scene shares the display. 'watchface' shows it together with the digital
+        time, 'exclusive' hides the digital clockface, 'ring_and_text' alternates with it.
+      default: watchface
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - watchface
+            - exclusive
+            - ring_and_text
+    slot:
+      name: Scene slot
+      description: Which scene slot to store this in. Reusing a slot replaces its contents.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 7
+          mode: box
+    life_time:
+      name: Lifetime
+      description: >-
+        Frames at 50 FPS before the scene stops animating. A fill stays on screen
+        afterwards, so this is not how long it is visible.
+      default: 50
+      selector:
+        number:
+          min: 1
+          max: 3000
+          mode: box
+
+clear_leds:
+  name: Clear LEDs
+  description: Remove a scene previously sent with Set LEDs.
+  fields:
+    slot:
+      name: Scene slot
+      description: The slot to clear.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 7
+          mode: box

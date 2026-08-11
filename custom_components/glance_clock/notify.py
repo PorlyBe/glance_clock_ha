@@ -325,6 +325,71 @@ class GlanceClockNotificationService(BaseNotificationService):
             _LOGGER.debug(f"Could not read settings from device: {e}")
             return None
 
+    async def async_send_custom_scene(
+        self,
+        segments: list[int],
+        mode: int = 8,
+        slot: int = 0,
+        life_time: int = 50,
+    ) -> bool:
+        """Light areas of the four LED rings with a CustomScene fill.
+
+        `mode` picks how the scene shares the display: 0 hides the digital
+        clockface, 8 shows the scene on the watchface alongside it, 24 puts the
+        scene into the rotation so it alternates with the clockface.
+
+        Times are in frames at 50 FPS. A fill stays on screen after its lifetime
+        ends, so a short lifetime is not a short display.
+        """
+        if not self._connection_manager or not self._connection_manager.is_connected:
+            _LOGGER.warning("Device not connected, cannot send custom scene")
+            return False
+
+        try:
+            from .glance_pb2 import CustomScene  # type: ignore
+            from .utils.led_utils import METHOD_FILL
+
+            scene = CustomScene()
+            obj = scene.object.add()
+            obj.method = METHOD_FILL
+            obj.startTime = 0
+            obj.lifeTime = life_time
+            obj.fill.segment.extend(segments)
+
+            command = bytes([0, 0, mode, slot]) + scene.SerializeToString()
+
+            _LOGGER.info(
+                "Sending custom scene: %d segment(s), mode %d, slot %d",
+                len(segments), mode, slot,
+            )
+            _LOGGER.debug("Custom scene command: %s", command.hex())
+
+            if await self._connection_manager.send_command(command):
+                _LOGGER.info("Custom scene sent successfully")
+                return True
+
+            _LOGGER.error("Failed to send custom scene command")
+            return False
+        except Exception as e:
+            _LOGGER.error(f"Error sending custom scene: {e}")
+            return False
+
+    async def async_delete_scene(self, slot: int = 0) -> bool:
+        """Remove the scene stored in one slot."""
+        if not self._connection_manager or not self._connection_manager.is_connected:
+            _LOGGER.warning("Device not connected, cannot delete scene")
+            return False
+
+        try:
+            if await self._connection_manager.send_command(bytes([33, 0, 0, slot])):
+                _LOGGER.info("Scene slot %d cleared", slot)
+                return True
+            _LOGGER.error("Failed to clear scene slot %d", slot)
+            return False
+        except Exception as e:
+            _LOGGER.error(f"Error clearing scene slot: {e}")
+            return False
+
     @staticmethod
     def _settings_to_dict(settings, raw: bytes) -> dict:
         """Decode a Settings message into the dict the entities consume.

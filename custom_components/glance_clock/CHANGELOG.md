@@ -46,12 +46,24 @@ All notable changes to this project will be documented in this file.
 - **A notify entity**, `notify.<clock>`, so the clock works with `notify.send_message`
   like any modern notification target. Sound, animation, effect, colour and priority ride
   along in the message as `[sound:bells]` markers rather than taking over `title`.
+- **The integration listens to the clock.** It subscribes to what the clock pushes and
+  fires `glance_clock_notification` events, which is what Node-RED and automations need to
+  react to the device rather than only command it.
+- **Sensors for what the clock is doing**: whether it is busy, whether it is currently
+  quiet, and a count of notifications received. Quiet is decoded from the state the clock
+  pushes -- bit 4 is Do Not Disturb, bit 3 is mute -- so it changes the moment the clock
+  changes, without polling.
+- **`send_command` and `read_characteristic`**, the escape hatch for the parts of the
+  firmware this integration does not model yet. `read_characteristic` with no arguments
+  enumerates the GATT table.
 
 ### Changed
 - **Scenes appear the moment they are sent.** Every scene write is now followed by a
   playback start, which also means a new scene replaces one already in the slot instead of
   waiting for the engine's next pass. Filmed on hardware: the wait was about fifteen
   seconds before, and is gone.
+- The **Time Mode** switch is now **Digital Clock**. It said what the underlying field is
+  called without saying what it does, so the control existed but nobody found it.
 
 ### Documentation
 - `send_forecast` writes to scene slot 1, and a scene stays in its slot and replays until

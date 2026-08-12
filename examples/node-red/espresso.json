@@ -1,0 +1,134 @@
+[
+    {
+        "id": "glance_espresso_tab",
+        "type": "tab",
+        "label": "Glance Clock - espresso ready",
+        "disabled": false,
+        "info": "Says on the clock when the espresso machine has come up to temperature,\nand again when it has cooled back down.\n\nChange the sensor entity id and the two thresholds. The filter node matters:\nwithout it you get a notice every time the sensor reports while hot."
+    },
+    {
+        "id": "ge_trigger",
+        "type": "server-state-changed",
+        "z": "glance_espresso_tab",
+        "name": "boiler temperature",
+        "server": "",
+        "version": 6,
+        "outputs": 1,
+        "exposeAsEntityConfig": "",
+        "entities": {
+            "entity": [
+                "sensor.espresso_boiler_temperature"
+            ],
+            "substring": [],
+            "regex": []
+        },
+        "outputInitially": false,
+        "stateType": "num",
+        "ignoreCurrentStateUnknown": true,
+        "ignoreCurrentStateUnavailable": true,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "x": 160,
+        "y": 100,
+        "wires": [
+            [
+                "ge_classify"
+            ]
+        ]
+    },
+    {
+        "id": "ge_classify",
+        "type": "function",
+        "z": "glance_espresso_tab",
+        "name": "ready or cold",
+        "func": "// Two thresholds rather than one, so a sensor hovering on the boundary\n// does not announce itself over and over.\nconst READY_AT = 92;\nconst COLD_BELOW = 80;\n\nconst temp = Number(msg.payload);\nif (Number.isNaN(temp)) {\n    return null;\n}\n\nif (temp >= READY_AT) {\n    msg.payload = 'ready';\n} else if (temp <= COLD_BELOW) {\n    msg.payload = 'cold';\n} else {\n    // In between: leave whatever was last announced standing.\n    return null;\n}\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 360,
+        "y": 100,
+        "wires": [
+            [
+                "ge_rbe"
+            ]
+        ]
+    },
+    {
+        "id": "ge_rbe",
+        "type": "rbe",
+        "z": "glance_espresso_tab",
+        "name": "only when it changes",
+        "func": "rbe",
+        "gap": "",
+        "start": "",
+        "inout": "out",
+        "septopics": false,
+        "property": "payload",
+        "topi": "topic",
+        "x": 570,
+        "y": 100,
+        "wires": [
+            [
+                "ge_notice"
+            ]
+        ]
+    },
+    {
+        "id": "ge_notice",
+        "type": "function",
+        "z": "glance_espresso_tab",
+        "name": "build the notice",
+        "func": "// A notice is immediate. A scene would wait for the clock's own cycle,\n// which can be fifteen seconds -- too long for something you are\n// standing there waiting for.\nif (msg.payload === 'ready') {\n    msg.action = 'glance_clock.send_notice';\n    msg.payload = {\n        text: 'ESPRESSO [icon:130]',\n        animation: 'pulse',\n        color: 'lime_green',\n        sound: 'bells',\n    };\n} else {\n    msg.action = 'glance_clock.send_notice';\n    msg.payload = {\n        text: 'KALL',\n        animation: 'none',\n        color: 'royal_blue',\n    };\n}\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 790,
+        "y": 100,
+        "wires": [
+            [
+                "ge_call"
+            ]
+        ]
+    },
+    {
+        "id": "ge_call",
+        "type": "api-call-service",
+        "z": "glance_espresso_tab",
+        "name": "send to the clock",
+        "server": "",
+        "version": 7,
+        "debugenabled": false,
+        "action": "",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "",
+        "dataType": "jsonata",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "domain": "",
+        "service": "",
+        "x": 1000,
+        "y": 100,
+        "wires": [
+            []
+        ]
+    }
+]

@@ -1,13 +1,73 @@
 import logging
 import asyncio
+from homeassistant.components.notify import NotifyEntity, NotifyEntityFeature
 from homeassistant.components.notify.legacy import BaseNotificationService
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from .const import DOMAIN, GLANCE_SERVICE_UUID, SETTINGS_CHARACTERISTIC_UUID
+from homeassistant.exceptions import ServiceValidationError
+from .const import (DND_FIELD_NAMES, DOMAIN, GLANCE_SERVICE_UUID, RAW_SETTINGS_KEY,
+                    SETTINGS_CHARACTERISTIC_UUID, SETTINGS_FIELD_NAMES)
 from bleak_retry_connector import BleakClientWithServiceCache
 from .glance_pb2 import Settings, ForecastScene  # type: ignore
 
 _LOGGER = logging.getLogger(__name__)
+
+
+#: The matrix font is ASCII only. Masking a character to 7 bits turns the ones
+#: people actually type into different letters -- 'a' becomes 'e', so "Hej da"
+#: arrives as "Hej de". Mapping them to their closest ASCII form is wrong too,
+#: but it is legible and predictable.
+TRANSLITERATION = {
+    "å": "a", "ä": "a", "ö": "o",
+    "Å": "A", "Ä": "A", "Ö": "O",
+    "é": "e", "è": "e", "ê": "e", "É": "E",
+    "ü": "u", "Ü": "U", "ø": "o", "Ø": "O",
+    "æ": "ae", "Æ": "AE", "ß": "ss",
+    "–": "-", "—": "-", "‘": "'", "’": "'",
+    "“": '"', "”": '"', "…": "...",
+}
+
+#: Charcode 154 is the font's own "missing character" glyph.
+MISSING_GLYPH = 154
+
+
+def _encode_char(char: str) -> list:
+    """Turn one character into display bytes.
+
+    Anything that cannot be represented becomes the font's missing-character
+    glyph, so a dropped letter is visible rather than silently changed.
+    """
+    out = []
+    for replacement in TRANSLITERATION.get(char, char):
+        code = ord(replacement)
+        out.append(code if code < 128 else MISSING_GLYPH)
+    return out
+
+
+def text_with_icons_to_bytes(text: str) -> bytes:
+    """Encode display text, expanding [icon:CODE] markers."""
+    import re
+
+    parts = []
+    last_index = 0
+    for match in re.finditer(r"\[icon:(\d+)\]", text):
+        for char in text[last_index:match.start()]:
+            parts.extend(_encode_char(char))
+        parts.append(int(match.group(1)) & 0xFF)
+        last_index = match.end()
+    for char in text[last_index:]:
+        parts.extend(_encode_char(char))
+    return bytes(parts)
+
+
+def _resolve_sound(value) -> int:
+    """Accept a sound name from SOUNDS or a raw index."""
+    from .const import SOUNDS
+    from .utils.enums import lookup_enum
+
+    return lookup_enum(SOUNDS, value, "sound")
+
 
 
 class CharacteristicMissingError(Exception):
@@ -28,19 +88,6 @@ class GlanceClockNotificationService(BaseNotificationService):
             import struct
             import time
             import re
-
-            def text_with_icons_to_bytes(text: str) -> bytes:
-                icon_regex = re.compile(r"\[icon:(\d+)\]")
-                parts = []
-                last_index = 0
-                for match in icon_regex.finditer(text):
-                    for c in text[last_index:match.start()]:
-                        parts.append(ord(c) & 0x7F)
-                    parts.append(int(match.group(1)))
-                    last_index = match.end()
-                for c in text[last_index:]:
-                    parts.append(ord(c) & 0x7F)
-                return bytes(parts)
 
             # Prepare intervals
             timer_intervals = []
@@ -124,7 +171,24 @@ class GlanceClockNotificationService(BaseNotificationService):
                 f"Has client: {hasattr(self._connection_manager, 'client')}")
 
     async def async_send_message(self, message="", **kwargs):
-        """Send a notification message to the Glance Clock."""
+        """Send a notification message to the Glance Clock.
+
+        UNREACHABLE as things stand, and worth knowing before spending time on
+        it. This class is a legacy BaseNotificationService, but nothing ever
+        registers it as one: the platform's async_setup_entry builds the object,
+        stores it in hass.data for the other services to use, and adds no
+        entities. So `notify.glance_clock` does not exist and this method has no
+        caller. Confirmed against a running Home Assistant 2026-08-12 -- the
+        notify domain lists every mobile app and no clock.
+
+        The class is really the integration's command layer wearing a notify
+        platform as a setup hook, which is also why Platform.NOTIFY cannot
+        simply be dropped: every other service reaches the clock through this
+        object.
+
+        Kept rather than deleted because it is correct code that a real notify
+        entity could use. Use glance_clock.send_notice instead.
+        """
         if not message:
             _LOGGER.warning("Cannot send empty notification message")
             return
@@ -132,27 +196,26 @@ class GlanceClockNotificationService(BaseNotificationService):
         # Extract notification parameters from kwargs
         title = kwargs.get("title", "")
         data = kwargs.get("data", {})
-        
-        # Default notification settings
-        animation = data.get("animation", 1)  # Default: Pulse
-        sound = data.get("sound", 0)  # Default: None
-        color = data.get("color", 12)  # Default: White
-        priority = data.get("priority", 16)  # Default: Medium
-        text_modifier = data.get("text_modifier", 0)  # Default: None
-        
+
+        # The documented way to call this platform is with names -- animation:
+        # "pulse", sound: "bells". Those went straight through to protobuf
+        # integer fields, which raised and left the notification unsent, so the
+        # example in the README could not have worked. Resolve them here, the
+        # same way send_notice does; raw indices still pass through.
+        from .services.notice import resolve_notice
+
+        try:
+            notice = resolve_notice(data)
+        except (ValueError, TypeError) as err:
+            _LOGGER.error("Cannot send notification: %s", err)
+            return
+
         # Combine title and message
         full_text = f"{title}: {message}" if title else message
-        
+
         try:
-            success = await self.async_send_notice(
-                text=full_text,
-                animation=animation,
-                sound=sound,
-                color=color,
-                priority=priority,
-                text_modifier=text_modifier
-            )
-            
+            success = await self.async_send_notice(text=full_text, **notice)
+
             if success:
                 _LOGGER.info(f"Notification sent successfully: {full_text}")
             else:
@@ -170,23 +233,6 @@ class GlanceClockNotificationService(BaseNotificationService):
 
         try:
             from .glance_pb2 import Notice, TextData  # type: ignore
-
-            def text_with_icons_to_bytes(text: str) -> bytes:
-                import re
-                icon_regex = re.compile(r"\[icon:(\d+)\]")
-                parts = []
-                last_index = 0
-                for match in icon_regex.finditer(text):
-                    # Add ASCII bytes for text before the icon
-                    for c in text[last_index:match.start()]:
-                        parts.append(ord(c) & 0x7F)
-                    # Add the icon byte
-                    parts.append(int(match.group(1)))
-                    last_index = match.end()
-                # Add remaining text
-                for c in text[last_index:]:
-                    parts.append(ord(c) & 0x7F)
-                return bytes(parts)
 
             # Create TextData for the notice
             text_data = TextData()
@@ -310,18 +356,7 @@ class GlanceClockNotificationService(BaseNotificationService):
                 _LOGGER.debug(f"  Protobuf attempt: {protobuf_data.hex()}")
                 return None
 
-            # Convert to dictionary
-            settings_dict = {
-                "nightModeEnabled": settings.nightModeEnabled,
-                "pointsAlwaysEnabled": settings.pointsAlwaysEnabled,
-                "displayBrightness": settings.displayBrightness,
-                "timeModeEnable": settings.timeModeEnable,
-                "timeFormat12": settings.timeFormat12,
-                "permanentDND": settings.permanentDND,
-                "permanentMute": settings.permanentMute,
-                "dateFormat": settings.dateFormat,
-                "mgrUserActivityTimeout": settings.mgrUserActivityTimeout,
-            }
+            settings_dict = self._settings_to_dict(settings, protobuf_data)
 
             _LOGGER.debug("Successfully read settings from device")
 
@@ -334,6 +369,299 @@ class GlanceClockNotificationService(BaseNotificationService):
         except Exception as e:
             _LOGGER.debug(f"Could not read settings from device: {e}")
             return None
+
+    #: Writing to a slot that is still playing works: the new scene replaces the
+    #: old one and shows at once. Verified on hardware 2026-08-12 by sending two
+    #: raw CustomScene frames to the same slot with nothing in between -- red,
+    #: then lime -- and watching the ring turn lime immediately. The clearing
+    #: that used to happen before every write was added in 1.14.0 on a theory
+    #: that had already been disproven, and it is what made a scene take fifteen
+    #: seconds to appear.
+
+    async def _refresh_scene_playback(self) -> None:
+        """Make a scene that has just been written take effect now.
+
+        Without this the clock picks the new scene up on its own cycle, up to
+        about fifteen seconds later. That delay was taken for firmware and
+        written into the documentation as a law -- scenes are for state,
+        notices are for events -- when it is really just the scene engine
+        waiting for its next pass.
+
+        Command 31 starts scene playback, and on hardware 2026-08-12 it brought
+        the new scene up immediately with nothing visible to give it away.
+        Command 35 does it too but draws the "fetching from the cloud"
+        indicator, which is a strange thing to show for a cloud that shut down
+        years ago, and 30 followed by 31 blinks the digital clockface -- which
+        a progress ring updating every minute would do every minute.
+
+        Best effort: the scene is already written and will appear on the cycle
+        regardless, so a refusal here costs latency, not the update.
+        """
+        try:
+            await self._connection_manager.send_command(bytes([31, 0, 0, 0]))
+        except Exception as err:  # noqa: BLE001 -- bleak raises broadly
+            _LOGGER.debug("Could not refresh scene playback: %s", err)
+
+    async def async_send_custom_scene(
+        self,
+        segments: list[int],
+        mode: int = 8,
+        slot: int = 0,
+        life_time: int = 50,
+    ) -> bool:
+        """Light areas of the four LED rings with a CustomScene fill.
+
+        `mode` picks how the scene shares the display: 0 hides the digital
+        clockface, 8 shows the scene on the watchface alongside it, 24 puts the
+        scene into the rotation so it alternates with the clockface.
+
+        Times are in frames at 50 FPS. A fill stays on screen after its lifetime
+        ends, so a short lifetime is not a short display.
+        """
+        if not self._connection_manager or not self._connection_manager.is_connected:
+            _LOGGER.warning("Device not connected, cannot send custom scene")
+            return False
+
+        try:
+            from .glance_pb2 import CustomScene  # type: ignore
+            from .utils.led_utils import METHOD_FILL
+
+            scene = CustomScene()
+            obj = scene.object.add()
+            obj.method = METHOD_FILL
+            obj.startTime = 0
+            obj.lifeTime = life_time
+            obj.fill.segment.extend(segments)
+
+            command = bytes([0, 0, mode, slot]) + scene.SerializeToString()
+
+            _LOGGER.info(
+                "Sending custom scene: %d segment(s), mode %d, slot %d",
+                len(segments), mode, slot,
+            )
+            _LOGGER.debug("Custom scene command: %s", command.hex())
+
+            if await self._connection_manager.send_command(command):
+                await self._refresh_scene_playback()
+                _LOGGER.info("Custom scene sent successfully")
+                return True
+
+            _LOGGER.error("Failed to send custom scene command")
+            return False
+        except Exception as e:
+            _LOGGER.error(f"Error sending custom scene: {e}")
+            return False
+
+    async def async_send_scene(
+        self,
+        steps: list[dict],
+        mode: int = 8,
+        slot: int = 0,
+    ) -> bool:
+        """Send a timed sequence of fills as one scene.
+
+        The clock plays the whole thing itself at 50 FPS, so this is how to
+        animate: upload a timeline rather than streaming frames. Sending fills
+        one at a time cannot animate, because a scene change only takes effect
+        on the clock's roughly 15 second scene cycle.
+        """
+        if not self._connection_manager or not self._connection_manager.is_connected:
+            _LOGGER.warning("Device not connected, cannot send scene")
+            return False
+
+        try:
+            from .glance_pb2 import CustomScene  # type: ignore
+            from .utils.led_utils import METHOD_FILL
+
+            from .glance_pb2 import TextData  # type: ignore
+            from .utils.led_utils import (
+                METHOD_AREA_ANIMATION,
+                METHOD_SOUND,
+                METHOD_TEXT,
+                METHOD_WEATHER,
+            )
+
+            scene = CustomScene()
+            for step in steps:
+                obj = scene.object.add()
+                obj.startTime = step["at"]
+                obj.lifeTime = step["frames"]
+                kind = step.get("type", "fill")
+
+                if kind == "fill":
+                    obj.method = METHOD_FILL
+                    obj.fill.segment.extend(step["segments"])
+
+                elif kind == "effect":
+                    # Layered onto areas already drawn in this scene; it does
+                    # not draw anything on its own.
+                    obj.method = METHOD_AREA_ANIMATION
+                    obj.areaAnimation.type = step["effect"]
+                    obj.areaAnimation.area.extend(step["segments"])
+                    if step["effect"] == 0 and (
+                        step["rise"] is not None or step["fall"] is not None
+                    ):
+                        obj.areaAnimation.pulse.riseTime = int(step["rise"] or 50)
+                        obj.areaAnimation.pulse.fallTime = int(step["fall"] or 50)
+                    elif step["effect"] == 1 and step["speed"] is not None:
+                        obj.areaAnimation.wave.speed = int(step["speed"])
+                    elif step["effect"] == 2:
+                        if step["color"] is not None:
+                            obj.areaAnimation.flashLight.color = step["color"]
+                        if step["speed"] is not None:
+                            obj.areaAnimation.flashLight.speed = int(step["speed"])
+
+                elif kind == "text":
+                    obj.method = METHOD_TEXT
+                    text_data = TextData()
+                    text_data.modificators = step["scroll"]
+                    text_data.text = text_with_icons_to_bytes(step["text"])
+                    obj.text.append(text_data)
+
+                elif kind == "sound":
+                    obj.method = METHOD_SOUND
+                    obj.sound = _resolve_sound(step["sound"])
+
+                elif kind == "weather":
+                    obj.method = METHOD_WEATHER
+                    obj.weather.condition = step["condition"]
+                    obj.weather.position = step["position"]
+                    obj.weather.intensity = step["intensity"]
+
+            command = bytes([0, 0, mode, slot]) + scene.SerializeToString()
+
+            _LOGGER.info(
+                "Sending scene: %d step(s), %d frames total, mode %d, slot %d",
+                len(steps),
+                max((s["at"] + s["frames"] for s in steps), default=0),
+                mode, slot,
+            )
+            _LOGGER.debug("Scene command: %s", command.hex())
+
+            if await self._connection_manager.send_command(command):
+                await self._refresh_scene_playback()
+                _LOGGER.info("Scene sent successfully")
+                return True
+
+            _LOGGER.error("Failed to send scene command")
+            return False
+        except Exception as e:
+            _LOGGER.error(f"Error sending scene: {e}")
+            return False
+
+    async def async_send_animation(
+        self,
+        animation: str,
+        segment: int,
+        speed: int = 3,
+        mode: int = 8,
+        slot: int = 0,
+        life_time: int = 2500,
+        back_color: int = 12,
+    ) -> bool:
+        """Run one of the firmware animations on the LED rings.
+
+        The firmware animations are single-colour patterns tinted by the colour
+        packed into `segment`; a colour of 0 is black and renders nothing.
+        """
+        if not self._connection_manager or not self._connection_manager.is_connected:
+            _LOGGER.warning("Device not connected, cannot send animation")
+            return False
+
+        try:
+            from .glance_pb2 import CustomScene  # type: ignore
+            from .utils.led_utils import (
+                ANIMATION_SWEEP,
+                GIF_ANIMATIONS,
+                METHOD_GIF,
+                METHOD_MOVING_BAR,
+            )
+
+            scene = CustomScene()
+            obj = scene.object.add()
+            obj.startTime = 0
+            obj.lifeTime = life_time
+
+            if animation == ANIMATION_SWEEP:
+                obj.method = METHOD_MOVING_BAR
+                obj.movingBar.area = segment
+                # The sweep takes its colour from the bar, not the area. Only
+                # the front colour is drawn -- the back colour is not rendered.
+                obj.movingBar.frontColor = (segment >> 16) & 0x3F
+                obj.movingBar.backColor = back_color
+                obj.movingBar.speed = speed
+            else:
+                obj.method = METHOD_GIF
+                obj.gif.type = GIF_ANIMATIONS[animation]
+                obj.gif.segment = segment
+                obj.gif.speed = speed
+
+            command = bytes([0, 0, mode, slot]) + scene.SerializeToString()
+
+            _LOGGER.info(
+                "Sending animation '%s' at speed %d, mode %d, slot %d",
+                animation, speed, mode, slot,
+            )
+            _LOGGER.debug("Animation command: %s", command.hex())
+
+            if await self._connection_manager.send_command(command):
+                await self._refresh_scene_playback()
+                _LOGGER.info("Animation sent successfully")
+                return True
+
+            _LOGGER.error("Failed to send animation command")
+            return False
+        except Exception as e:
+            _LOGGER.error(f"Error sending animation: {e}")
+            return False
+
+    async def async_delete_scene(self, slot: int = 0, refresh: bool = True) -> bool:
+        """Remove the scene stored in one slot.
+
+        `refresh` exists for the caller clearing several slots in a row, which
+        only needs the display brought up to date once at the end.
+        """
+        if not self._connection_manager or not self._connection_manager.is_connected:
+            _LOGGER.warning("Device not connected, cannot delete scene")
+            return False
+
+        try:
+            if await self._connection_manager.send_command(bytes([33, 0, 0, slot])):
+                if refresh:
+                    await self._refresh_scene_playback()
+                _LOGGER.info("Scene slot %d cleared", slot)
+                return True
+            _LOGGER.error("Failed to clear scene slot %d", slot)
+            return False
+        except Exception as e:
+            _LOGGER.error(f"Error clearing scene slot: {e}")
+            return False
+
+    @staticmethod
+    def _settings_to_dict(settings, raw: bytes) -> dict:
+        """Decode a Settings message into the dict the entities consume.
+
+        The raw bytes travel with it because a write has to patch the device's
+        own message rather than rebuild it -- see async_write_settings.
+        """
+        has_dnd = settings.HasField("dnd")
+        return {
+            "nightModeEnabled": settings.nightModeEnabled,
+            "pointsAlwaysEnabled": settings.pointsAlwaysEnabled,
+            "displayBrightness": settings.displayBrightness,
+            "timeModeEnable": settings.timeModeEnable,
+            "timeFormat12": settings.timeFormat12,
+            "permanentDND": settings.permanentDND,
+            "permanentMute": settings.permanentMute,
+            "dateFormat": settings.dateFormat,
+            "mgrUserActivityTimeout": settings.mgrUserActivityTimeout,
+            # None means no schedule is stored at all, which is different from
+            # a schedule of 00:00-00:00.
+            "dndRecurring": settings.dnd.recurring if has_dnd else None,
+            "dndFromHour": settings.dnd.fromHour if has_dnd else None,
+            "dndTillHour": settings.dnd.tillHour if has_dnd else None,
+            RAW_SETTINGS_KEY: bytes(raw),
+        }
 
     async def async_read_current_settings_safe(self) -> dict | None:
         """Safe wrapper for reading settings."""
@@ -424,27 +752,60 @@ class GlanceClockNotificationService(BaseNotificationService):
                     "permanentDND": False,
                     "permanentMute": False,
                     "dateFormat": 0,
-                    "mgrUserActivityTimeout": 600,
+                    # mgrUserActivityTimeout is deliberately absent. Devices
+                    # that do not report it use a firmware default; writing an
+                    # explicit value here has been observed to stop the rim
+                    # points staying lit.
                 }
                 _LOGGER.debug("Using default settings as base")
 
-            # Update only the specified settings
-            updated_settings = current_settings.copy()
-            updated_settings.update(settings_data)
-
-            # Create protobuf Settings message
             settings = Settings()
-            
-            # Map the dictionary to protobuf fields
-            settings.nightModeEnabled = updated_settings.get("nightModeEnabled", True)
-            settings.pointsAlwaysEnabled = updated_settings.get("pointsAlwaysEnabled", False)
-            settings.displayBrightness = updated_settings.get("displayBrightness", 128)
-            settings.timeModeEnable = updated_settings.get("timeModeEnable", True)
-            settings.timeFormat12 = updated_settings.get("timeFormat12", False)
-            settings.permanentDND = updated_settings.get("permanentDND", False)
-            settings.permanentMute = updated_settings.get("permanentMute", False)
-            settings.dateFormat = updated_settings.get("dateFormat", 0)
-            settings.mgrUserActivityTimeout = updated_settings.get("mgrUserActivityTimeout", 600)
+
+            raw_settings = current_settings.get(RAW_SETTINGS_KEY)
+            if raw_settings:
+                # Start from the device's own message rather than a blank one.
+                # Parsing preserves every field it contains, including the
+                # nested DND schedule and any field this schema does not know
+                # about, and re-serialising is byte-identical when nothing is
+                # changed. Building a fresh Settings() instead would drop them.
+                settings.ParseFromString(raw_settings)
+            else:
+                # No successful read to build on. Fall back to the previous
+                # behaviour, but only for the fields we actually have values
+                # for -- writing defaults for the rest is what corrupted
+                # devices before.
+                _LOGGER.warning(
+                    "Writing settings without a prior read; fields not modelled "
+                    "by this integration cannot be preserved"
+                )
+                for key in SETTINGS_FIELD_NAMES:
+                    if key in current_settings:
+                        setattr(settings, key, current_settings[key])
+
+            # Apply only what the caller asked to change.
+            dnd_changes = {
+                DND_FIELD_NAMES[key]: value
+                for key, value in settings_data.items()
+                if key in DND_FIELD_NAMES
+            }
+            for key, value in settings_data.items():
+                if key in DND_FIELD_NAMES:
+                    continue
+                if key not in SETTINGS_FIELD_NAMES:
+                    _LOGGER.warning("Ignoring unknown setting %s", key)
+                    continue
+                setattr(settings, key, value)
+
+            if dnd_changes:
+                # All three DND fields are `required` in the schema, so a
+                # partially populated submessage will not serialise. When the
+                # device has no schedule yet, fill the gaps rather than fail.
+                if not settings.HasField("dnd"):
+                    dnd_changes.setdefault("recurring", True)
+                    dnd_changes.setdefault("fromHour", 0)
+                    dnd_changes.setdefault("tillHour", 0)
+                for field, value in dnd_changes.items():
+                    setattr(settings.dnd, field, value)
 
             # Serialize the settings
             settings_bytes = settings.SerializeToString()
@@ -460,7 +821,16 @@ class GlanceClockNotificationService(BaseNotificationService):
             
             if success:
                 _LOGGER.info("Settings written successfully")
-                
+
+                # Make the cache reflect what was just written. Without this the
+                # next write within the cache lifetime starts from pre-write
+                # bytes and silently reverts this change -- two settings changed
+                # in quick succession would fight each other.
+                if self._connection_manager:
+                    self._connection_manager.cache_settings(
+                        self._settings_to_dict(settings, settings_bytes)
+                    )
+
                 # If this was a brightness change, schedule brightness scene stop after 3 seconds
                 # (like the web app does)
                 if is_brightness_change:
@@ -493,7 +863,8 @@ class GlanceClockNotificationService(BaseNotificationService):
         min_color: int,
         values: bytes,
         start_timestamp: int,
-        template: bytes | None = None
+        template: bytes | None = None,
+        unit: str = "C",
     ) -> bool:
         """Send weather forecast data to the Glance Clock."""
         if not self._connection_manager or not self._connection_manager.is_connected:
@@ -510,12 +881,18 @@ class GlanceClockNotificationService(BaseNotificationService):
             _LOGGER.info(f"Min color: 0x{min_color:06X} ({min_color})")
             _LOGGER.info(f"Temperature values ({len(values)} bytes): {values.hex()}")
             
-            # Default template matching web project: thermometer icon + current value + °C
+            # Thermometer icon, the current value, then the degree sign and the
+            # unit letter. Home Assistant has already converted the numbers to
+            # whatever the user's system uses, so only the letter changes here --
+            # converting again would double-convert.
             if template is None:
-                # Template: [194, 143, 8, 194, 176, 67] = thermometer icon + value placeholder + °C
-                default_template = bytes([194, 143, 8, 194, 176, 67])  # 67 = 'C'
+                letter = ord("F") if str(unit).upper().endswith("F") else ord("C")
+                default_template = bytes([194, 143, 8, 194, 176, letter])
                 template = default_template
-                _LOGGER.info(f"Using default template: {template.hex()}")
+                _LOGGER.info(
+                    "Using default template in degrees %s: %s",
+                    chr(letter), template.hex(),
+                )
             else:
                 _LOGGER.info(f"Using custom template ({len(template)} bytes): {template.hex()}")
             
@@ -584,17 +961,84 @@ class GlanceClockNotificationService(BaseNotificationService):
             return False
 
 
+class GlanceClockNotifyEntity(NotifyEntity):
+    """A notify entity, so the clock can be a target like any phone.
+
+    Home Assistant's modern notify platform carries a message and a title and
+    nothing else, which is the right shape for a phone and a poor fit for a
+    clock that can pick a sound, an animation and a colour. Those ride in the
+    message as markers instead -- see utils/notice_markers.py for why title was
+    not overloaded to mean one of them.
+
+    This does not replace glance_clock.send_notice. That service reaches
+    everything the firmware has, and it is what an automation written for the
+    clock should use. This is for the automations written for everything.
+    """
+
+    _attr_supported_features = NotifyEntityFeature.TITLE
+    _attr_icon = "mdi:clock-alert-outline"
+
+    def __init__(self, entry: ConfigEntry, config_data: dict, service) -> None:
+        """Initialize the notify entity."""
+        self._entry = entry
+        self._service = service
+        self._mac_address = config_data.get("mac_address")
+        self._attr_name = None  # the device's own name is enough
+        self._attr_unique_id = f"{self._mac_address}_notify"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._mac_address)},
+            connections={("bluetooth", self._mac_address)},
+        )
+
+    async def async_send_message(self, message: str, title: str | None = None) -> None:
+        """Show a message, applying any settings its markers carry."""
+        from .services.notice import resolve_notice
+        from .utils.notice_markers import extract_notice_options
+
+        text, options = extract_notice_options(message or "")
+
+        # Title first, the way the old legacy path composed it. A generic
+        # sender uses it as a title and gets one; nothing here reinterprets it.
+        if title:
+            text = f"{title}: {text}" if text else title
+
+        if not text:
+            _LOGGER.warning("Cannot send an empty notification")
+            return
+
+        try:
+            notice = resolve_notice(options)
+        except (ValueError, TypeError) as err:
+            # A marker naming a colour or sound the firmware does not have.
+            # Raised so it reaches the caller rather than dying in the log.
+            raise ServiceValidationError(f"notify: {err}") from err
+
+        await self._service.async_send_notice(text=text, **notice)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> bool:
-    """Set up the Glance Clock notification service."""
+    """Set up the Glance Clock notification service and its notify entity."""
     config_data = hass.data[DOMAIN][entry.entry_id]
 
-    # Create notification service
+    # This object is the integration's command layer, not a notify platform:
+    # send_notice, set_leds, set_scene and the rest all reach the clock through
+    # it. It lives here for historical reasons, which is why Platform.NOTIFY
+    # cannot simply be dropped.
     notify_service = GlanceClockNotificationService(config_data)
 
     # Store the service for access by entities
     if DOMAIN + "_notify" not in hass.data:
         hass.data[DOMAIN + "_notify"] = {}
     hass.data[DOMAIN + "_notify"][entry.entry_id] = notify_service
+
+    # And now an actual entity, so notify.send_message has something to target.
+    # Until 1.27.0 this platform added none, so notify.<clock> did not exist
+    # while the README insisted it did.
+    async_add_entities([GlanceClockNotifyEntity(entry, config_data, notify_service)])
 
     _LOGGER.info(
         f"Glance Clock notification service set up for {config_data.get('name')}")

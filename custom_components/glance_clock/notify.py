@@ -1,8 +1,11 @@
 import logging
 import asyncio
+from homeassistant.components.notify import NotifyEntity, NotifyEntityFeature
 from homeassistant.components.notify.legacy import BaseNotificationService
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import ServiceValidationError
 from .const import (DND_FIELD_NAMES, DOMAIN, GLANCE_SERVICE_UUID, RAW_SETTINGS_KEY,
                     SETTINGS_CHARACTERISTIC_UUID, SETTINGS_FIELD_NAMES)
 from bleak_retry_connector import BleakClientWithServiceCache
@@ -61,15 +64,9 @@ def text_with_icons_to_bytes(text: str) -> bytes:
 def _resolve_sound(value) -> int:
     """Accept a sound name from SOUNDS or a raw index."""
     from .const import SOUNDS
+    from .utils.enums import lookup_enum
 
-    if isinstance(value, str):
-        key = value.strip().lower()
-        if key not in SOUNDS:
-            raise ValueError(
-                f"unknown sound '{value}'; expected one of {', '.join(sorted(SOUNDS))}"
-            )
-        return SOUNDS[key]
-    return int(value)
+    return lookup_enum(SOUNDS, value, "sound")
 
 
 
@@ -174,7 +171,24 @@ class GlanceClockNotificationService(BaseNotificationService):
                 f"Has client: {hasattr(self._connection_manager, 'client')}")
 
     async def async_send_message(self, message="", **kwargs):
-        """Send a notification message to the Glance Clock."""
+        """Send a notification message to the Glance Clock.
+
+        UNREACHABLE as things stand, and worth knowing before spending time on
+        it. This class is a legacy BaseNotificationService, but nothing ever
+        registers it as one: the platform's async_setup_entry builds the object,
+        stores it in hass.data for the other services to use, and adds no
+        entities. So `notify.glance_clock` does not exist and this method has no
+        caller. Confirmed against a running Home Assistant 2026-08-12 -- the
+        notify domain lists every mobile app and no clock.
+
+        The class is really the integration's command layer wearing a notify
+        platform as a setup hook, which is also why Platform.NOTIFY cannot
+        simply be dropped: every other service reaches the clock through this
+        object.
+
+        Kept rather than deleted because it is correct code that a real notify
+        entity could use. Use glance_clock.send_notice instead.
+        """
         if not message:
             _LOGGER.warning("Cannot send empty notification message")
             return
@@ -182,27 +196,26 @@ class GlanceClockNotificationService(BaseNotificationService):
         # Extract notification parameters from kwargs
         title = kwargs.get("title", "")
         data = kwargs.get("data", {})
-        
-        # Default notification settings
-        animation = data.get("animation", 1)  # Default: Pulse
-        sound = data.get("sound", 0)  # Default: None
-        color = data.get("color", 12)  # Default: White
-        priority = data.get("priority", 16)  # Default: Medium
-        text_modifier = data.get("text_modifier", 0)  # Default: None
-        
+
+        # The documented way to call this platform is with names -- animation:
+        # "pulse", sound: "bells". Those went straight through to protobuf
+        # integer fields, which raised and left the notification unsent, so the
+        # example in the README could not have worked. Resolve them here, the
+        # same way send_notice does; raw indices still pass through.
+        from .services.notice import resolve_notice
+
+        try:
+            notice = resolve_notice(data)
+        except (ValueError, TypeError) as err:
+            _LOGGER.error("Cannot send notification: %s", err)
+            return
+
         # Combine title and message
         full_text = f"{title}: {message}" if title else message
-        
+
         try:
-            success = await self.async_send_notice(
-                text=full_text,
-                animation=animation,
-                sound=sound,
-                color=color,
-                priority=priority,
-                text_modifier=text_modifier
-            )
-            
+            success = await self.async_send_notice(text=full_text, **notice)
+
             if success:
                 _LOGGER.info(f"Notification sent successfully: {full_text}")
             else:
@@ -357,6 +370,38 @@ class GlanceClockNotificationService(BaseNotificationService):
             _LOGGER.debug(f"Could not read settings from device: {e}")
             return None
 
+    #: Writing to a slot that is still playing works: the new scene replaces the
+    #: old one and shows at once. Verified on hardware 2026-08-12 by sending two
+    #: raw CustomScene frames to the same slot with nothing in between -- red,
+    #: then lime -- and watching the ring turn lime immediately. The clearing
+    #: that used to happen before every write was added in 1.14.0 on a theory
+    #: that had already been disproven, and it is what made a scene take fifteen
+    #: seconds to appear.
+
+    async def _refresh_scene_playback(self) -> None:
+        """Make a scene that has just been written take effect now.
+
+        Without this the clock picks the new scene up on its own cycle, up to
+        about fifteen seconds later. That delay was taken for firmware and
+        written into the documentation as a law -- scenes are for state,
+        notices are for events -- when it is really just the scene engine
+        waiting for its next pass.
+
+        Command 31 starts scene playback, and on hardware 2026-08-12 it brought
+        the new scene up immediately with nothing visible to give it away.
+        Command 35 does it too but draws the "fetching from the cloud"
+        indicator, which is a strange thing to show for a cloud that shut down
+        years ago, and 30 followed by 31 blinks the digital clockface -- which
+        a progress ring updating every minute would do every minute.
+
+        Best effort: the scene is already written and will appear on the cycle
+        regardless, so a refusal here costs latency, not the update.
+        """
+        try:
+            await self._connection_manager.send_command(bytes([31, 0, 0, 0]))
+        except Exception as err:  # noqa: BLE001 -- bleak raises broadly
+            _LOGGER.debug("Could not refresh scene playback: %s", err)
+
     async def async_send_custom_scene(
         self,
         segments: list[int],
@@ -397,6 +442,7 @@ class GlanceClockNotificationService(BaseNotificationService):
             _LOGGER.debug("Custom scene command: %s", command.hex())
 
             if await self._connection_manager.send_command(command):
+                await self._refresh_scene_playback()
                 _LOGGER.info("Custom scene sent successfully")
                 return True
 
@@ -493,6 +539,7 @@ class GlanceClockNotificationService(BaseNotificationService):
             _LOGGER.debug("Scene command: %s", command.hex())
 
             if await self._connection_manager.send_command(command):
+                await self._refresh_scene_playback()
                 _LOGGER.info("Scene sent successfully")
                 return True
 
@@ -558,6 +605,7 @@ class GlanceClockNotificationService(BaseNotificationService):
             _LOGGER.debug("Animation command: %s", command.hex())
 
             if await self._connection_manager.send_command(command):
+                await self._refresh_scene_playback()
                 _LOGGER.info("Animation sent successfully")
                 return True
 
@@ -567,14 +615,20 @@ class GlanceClockNotificationService(BaseNotificationService):
             _LOGGER.error(f"Error sending animation: {e}")
             return False
 
-    async def async_delete_scene(self, slot: int = 0) -> bool:
-        """Remove the scene stored in one slot."""
+    async def async_delete_scene(self, slot: int = 0, refresh: bool = True) -> bool:
+        """Remove the scene stored in one slot.
+
+        `refresh` exists for the caller clearing several slots in a row, which
+        only needs the display brought up to date once at the end.
+        """
         if not self._connection_manager or not self._connection_manager.is_connected:
             _LOGGER.warning("Device not connected, cannot delete scene")
             return False
 
         try:
             if await self._connection_manager.send_command(bytes([33, 0, 0, slot])):
+                if refresh:
+                    await self._refresh_scene_playback()
                 _LOGGER.info("Scene slot %d cleared", slot)
                 return True
             _LOGGER.error("Failed to clear scene slot %d", slot)
@@ -907,17 +961,84 @@ class GlanceClockNotificationService(BaseNotificationService):
             return False
 
 
+class GlanceClockNotifyEntity(NotifyEntity):
+    """A notify entity, so the clock can be a target like any phone.
+
+    Home Assistant's modern notify platform carries a message and a title and
+    nothing else, which is the right shape for a phone and a poor fit for a
+    clock that can pick a sound, an animation and a colour. Those ride in the
+    message as markers instead -- see utils/notice_markers.py for why title was
+    not overloaded to mean one of them.
+
+    This does not replace glance_clock.send_notice. That service reaches
+    everything the firmware has, and it is what an automation written for the
+    clock should use. This is for the automations written for everything.
+    """
+
+    _attr_supported_features = NotifyEntityFeature.TITLE
+    _attr_icon = "mdi:clock-alert-outline"
+
+    def __init__(self, entry: ConfigEntry, config_data: dict, service) -> None:
+        """Initialize the notify entity."""
+        self._entry = entry
+        self._service = service
+        self._mac_address = config_data.get("mac_address")
+        self._attr_name = None  # the device's own name is enough
+        self._attr_unique_id = f"{self._mac_address}_notify"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._mac_address)},
+            connections={("bluetooth", self._mac_address)},
+        )
+
+    async def async_send_message(self, message: str, title: str | None = None) -> None:
+        """Show a message, applying any settings its markers carry."""
+        from .services.notice import resolve_notice
+        from .utils.notice_markers import extract_notice_options
+
+        text, options = extract_notice_options(message or "")
+
+        # Title first, the way the old legacy path composed it. A generic
+        # sender uses it as a title and gets one; nothing here reinterprets it.
+        if title:
+            text = f"{title}: {text}" if text else title
+
+        if not text:
+            _LOGGER.warning("Cannot send an empty notification")
+            return
+
+        try:
+            notice = resolve_notice(options)
+        except (ValueError, TypeError) as err:
+            # A marker naming a colour or sound the firmware does not have.
+            # Raised so it reaches the caller rather than dying in the log.
+            raise ServiceValidationError(f"notify: {err}") from err
+
+        await self._service.async_send_notice(text=text, **notice)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> bool:
-    """Set up the Glance Clock notification service."""
+    """Set up the Glance Clock notification service and its notify entity."""
     config_data = hass.data[DOMAIN][entry.entry_id]
 
-    # Create notification service
+    # This object is the integration's command layer, not a notify platform:
+    # send_notice, set_leds, set_scene and the rest all reach the clock through
+    # it. It lives here for historical reasons, which is why Platform.NOTIFY
+    # cannot simply be dropped.
     notify_service = GlanceClockNotificationService(config_data)
 
     # Store the service for access by entities
     if DOMAIN + "_notify" not in hass.data:
         hass.data[DOMAIN + "_notify"] = {}
     hass.data[DOMAIN + "_notify"][entry.entry_id] = notify_service
+
+    # And now an actual entity, so notify.send_message has something to target.
+    # Until 1.27.0 this platform added none, so notify.<clock> did not exist
+    # while the README insisted it did.
+    async_add_entities([GlanceClockNotifyEntity(entry, config_data, notify_service)])
 
     _LOGGER.info(
         f"Glance Clock notification service set up for {config_data.get('name')}")

@@ -17,6 +17,12 @@ from .entity import GlanceClockEntity
 
 _LOGGER = logging.getLogger(__name__)
 
+# displayBrightness is not the 0-100 percentage the schema claims. Measured on
+# hardware: the low byte is the manual level (1 barely visible, 255 full) and 0
+# hands control back to the ambient light sensor. The upper bits made no
+# distinguishable difference and are treated as opaque.
+BRIGHTNESS_LEVEL_MASK = 0xFF
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -49,6 +55,7 @@ class GlanceClockDisplayLight(GlanceClockEntity, LightEntity):
         self._attr_color_mode = ColorMode.BRIGHTNESS
         self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
         self._brightness = None
+        self._raw_brightness = None
         self._is_on = None
         self._available = False
         self._auto_brightness = False
@@ -170,10 +177,15 @@ class GlanceClockDisplayLight(GlanceClockEntity, LightEntity):
         try:
             settings = await self._read_settings()
             if settings and "displayBrightness" in settings:
-                brightness_value = settings["displayBrightness"]
+                # Only the low byte is the manual level. Devices carry more in
+                # the upper bits -- a working clock reported 2016768 (0x1EC600)
+                # -- so treating the whole field as 0-255 both misreads the
+                # state and destroys those bits when writing it back.
+                self._raw_brightness = settings["displayBrightness"]
+                brightness_value = self._raw_brightness & BRIGHTNESS_LEVEL_MASK
                 self._brightness = brightness_value
-                
-                # Auto brightness is when brightness is 0
+
+                # Auto brightness is when the manual level is 0
                 self._auto_brightness = (brightness_value == 0)
                 
                 # "Auto Brightness" is "on" when brightness = 0 (auto mode)
@@ -200,9 +212,14 @@ class GlanceClockDisplayLight(GlanceClockEntity, LightEntity):
                 _LOGGER.warning("Device not connected, cannot set brightness")
                 return False
 
-            # Create settings command
+            # Keep whatever the device stores above the low byte. Those bits are
+            # undocumented, they differ per device, and overwriting them with a
+            # bare 0-255 value has been observed to leave the display in a state
+            # where the rim points stop showing.
+            raw = getattr(self, "_raw_brightness", None) or 0
             settings_data = {
-                "displayBrightness": brightness
+                "displayBrightness": (raw & ~BRIGHTNESS_LEVEL_MASK)
+                | (brightness & BRIGHTNESS_LEVEL_MASK)
             }
 
             success = await self._write_settings(settings_data)

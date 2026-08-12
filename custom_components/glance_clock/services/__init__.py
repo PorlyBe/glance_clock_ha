@@ -9,6 +9,9 @@ from .refresh import handle_refresh_entities
 from .notice import handle_send_notice
 from .forecast import handle_send_forecast
 from .timer import handle_send_timer
+from .dnd_schedule import handle_set_dnd_schedule, handle_read_dnd_schedule
+from .leds import (handle_set_leds, handle_clear_leds, handle_set_animation,
+                   handle_set_scene)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +37,24 @@ async def async_register_services(hass: HomeAssistant, entry: ConfigEntry):
     async def _handle_send_timer(call: ServiceCall):
         await handle_send_timer(hass, entry, call)
 
+    async def _handle_set_dnd_schedule(call: ServiceCall):
+        await handle_set_dnd_schedule(hass, entry, call)
+
+    async def _handle_read_dnd_schedule(call: ServiceCall):
+        await handle_read_dnd_schedule(hass, entry, call)
+
+    async def _handle_set_leds(call: ServiceCall):
+        await handle_set_leds(hass, entry, call)
+
+    async def _handle_clear_leds(call: ServiceCall):
+        await handle_clear_leds(hass, entry, call)
+
+    async def _handle_set_animation(call: ServiceCall):
+        await handle_set_animation(hass, entry, call)
+
+    async def _handle_set_scene(call: ServiceCall):
+        await handle_set_scene(hass, entry, call)
+
     # Register services
     hass.services.async_register(
         DOMAIN, "update_display_settings", _handle_update_display_settings
@@ -53,6 +74,24 @@ async def async_register_services(hass: HomeAssistant, entry: ConfigEntry):
     hass.services.async_register(
         DOMAIN, "send_timer", _handle_send_timer
     )
+    hass.services.async_register(
+        DOMAIN, "set_dnd_schedule", _handle_set_dnd_schedule
+    )
+    hass.services.async_register(
+        DOMAIN, "read_dnd_schedule", _handle_read_dnd_schedule
+    )
+    hass.services.async_register(
+        DOMAIN, "set_leds", _handle_set_leds
+    )
+    hass.services.async_register(
+        DOMAIN, "clear_leds", _handle_clear_leds
+    )
+    hass.services.async_register(
+        DOMAIN, "set_animation", _handle_set_animation
+    )
+    hass.services.async_register(
+        DOMAIN, "set_scene", _handle_set_scene
+    )
 
     _LOGGER.info("All Glance Clock services registered")
 
@@ -67,4 +106,10 @@ async def async_unregister_services(hass: HomeAssistant):
         hass.services.async_remove(DOMAIN, "send_notice")
         hass.services.async_remove(DOMAIN, "send_forecast")
         hass.services.async_remove(DOMAIN, "send_timer")
+        hass.services.async_remove(DOMAIN, "set_dnd_schedule")
+        hass.services.async_remove(DOMAIN, "read_dnd_schedule")
+        hass.services.async_remove(DOMAIN, "set_leds")
+        hass.services.async_remove(DOMAIN, "clear_leds")
+        hass.services.async_remove(DOMAIN, "set_animation")
+        hass.services.async_remove(DOMAIN, "set_scene")
         _LOGGER.info("All Glance Clock services unregistered")

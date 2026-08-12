@@ -4,7 +4,9 @@ send_timer:
   fields:
     countdown:
       name: "Countdown (seconds)"
-      description: "Time before timer starts."
+      description: >-
+        Delay before the timer starts. NOT how long it counts -- that is the
+        'duration' of each interval.
       required: false
       selector:
         number:
@@ -20,12 +22,14 @@ send_timer:
     intervals:
       name: "Intervals (optional)"
       description: |
-        List of timer intervals. Each interval can have:
+        The stages of the timer, and the part that makes it a timer at all. At
+        least one is required: a call without intervals reaches the clock and
+        displays nothing. Each interval can have:
           - text: string (supports [icon:CODE])
-          - duration: seconds (int)
+          - duration: seconds (int) -- how long this stage runs
           - countdown: seconds (int, optional)
-        Leave empty for a simple timer.
-      required: true
+        For a plain single countdown, give one interval with a duration.
+      required: false
       selector:
         object:
           label_field: text
@@ -130,12 +134,40 @@ send_notice:
               value: "wheel"
             - label: "Flower"
               value: "flower"
+            - label: "Flower2"
+              value: "flower2"
+            - label: "Fan"
+              value: "fan"
             - label: "Sun"
               value: "sun"
             - label: "Thunderstorm"
               value: "thunderstorm"
             - label: "Cloud"
               value: "cloud"
+            - label: "Weather: Clear"
+              value: "weather_clear"
+            - label: "Weather: Cloudy"
+              value: "weather_cloudy"
+            - label: "Weather: Fog"
+              value: "weather_fog"
+            - label: "Weather: Light Rain"
+              value: "weather_light_rain"
+            - label: "Weather: Rain"
+              value: "weather_rain"
+            - label: "Weather: Thunderstorm"
+              value: "weather_thunderstorm"
+            - label: "Weather: Snow"
+              value: "weather_snow"
+            - label: "Weather: Hail"
+              value: "weather_hail"
+            - label: "Weather: Wind"
+              value: "weather_wind"
+            - label: "Weather: Tornado"
+              value: "weather_tornado"
+            - label: "Weather: Hurricane"
+              value: "weather_hurricane"
+            - label: "Weather: Snow Thunderstorm"
+              value: "weather_snow_thunderstorm"
     sound:
       name: "Sound"
       description: "Notification sound"
@@ -149,14 +181,36 @@ send_notice:
               value: "waves"
             - label: "Rise"
               value: "rise"
-            - label: "Bells"
-              value: "bells"
+            - label: "Charging"
+              value: "charging"
+            - label: "Steps"
+              value: "steps"
             - label: "Radar"
               value: "radar"
+            - label: "Bells"
+              value: "bells"
+            - label: "Bye"
+              value: "bye"
             - label: "Hello"
               value: "hello"
+            - label: "Flowers"
+              value: "flowers"
+            - label: "Circles"
+              value: "circles"
             - label: "Complete"
               value: "complete"
+            - label: "Popcorn"
+              value: "popcorn"
+            - label: "Break"
+              value: "break"
+            - label: "Opening"
+              value: "opening"
+            - label: "High"
+              value: "high"
+            - label: "Shine"
+              value: "shine"
+            - label: "Extension"
+              value: "extension"
     color:
       name: "Color"
       description: "Display color"
@@ -164,19 +218,55 @@ send_notice:
       selector:
         select:
           options:
-            - label: "White"
-              value: "white"
+            - label: "Black"
+              value: "black"
+            - label: "Dark Golden Rod"
+              value: "dark_golden_rod"
+            - label: "Dark Orange"
+              value: "dark_orange"
+            - label: "Olive"
+              value: "olive"
+            - label: "Orange Red"
+              value: "orange_red"
             - label: "Red"
               value: "red"
+            - label: "Maroon"
+              value: "maroon"
+            - label: "Dark Magenta"
+              value: "dark_magenta"
+            - label: "Medium Violet Red"
+              value: "medium_violet_red"
+            - label: "Brown"
+              value: "brown"
+            - label: "Indigo"
+              value: "indigo"
+            - label: "Blue Violet"
+              value: "blue_violet"
+            - label: "White"
+              value: "white"
+            - label: "Light Slate Blue"
+              value: "light_slate_blue"
+            - label: "Royal Blue"
+              value: "royal_blue"
             - label: "Blue"
               value: "blue"
-            - label: "Green (Lime)"
+            - label: "Cornflower Blue"
+              value: "cornflower_blue"
+            - label: "Sky Blue"
+              value: "sky_blue"
+            - label: "Turquoise"
+              value: "turquoise"
+            - label: "Aqua"
+              value: "aqua"
+            - label: "Medium Spring Green"
+              value: "medium_spring_green"
+            - label: "Lime Green"
+              value: "lime_green"
+            - label: "Dark Green"
+              value: "dark_green"
+            - label: "Lime"
               value: "lime"
-            - label: "Orange"
-              value: "dark_orange"
-            - label: "Purple"
-              value: "blue_violet"
-            - label: "Yellow"
+            - label: "Lawn Green"
               value: "lawn_green"
     priority:
       name: "Priority"
@@ -191,6 +281,8 @@ send_notice:
               value: "medium"
             - label: "High"
               value: "high"
+            - label: "Highest"
+              value: "highest"
             - label: "Critical"
               value: "critical"
     text_modifier:
@@ -219,6 +311,8 @@ refresh_entities:
 
 send_forecast:
   name: "Send Weather Forecast"
+  # Writes to scene slot 1. Remove it again with clear_leds and slot 1 -- a
+  # scene stays in its slot and replays until something clears it.
   description: "Send 24-hour weather forecast data to the Glance Clock with color gradient support"
   fields:
     weather_entity:
@@ -261,3 +355,277 @@ send_forecast:
       description: "Optional display template data (advanced users). If not provided, uses default thermometer icon + value + °C"
       selector:
         text:
+
+set_dnd_schedule:
+  name: Set DND schedule
+  description: >-
+    Set the recurring Do Not Disturb window stored on the clock. This is the
+    schedule the clock applies itself, separate from the permanent DND flag.
+  fields:
+    from_hour:
+      name: From hour
+      description: Hour the quiet period starts, 0-23.
+      example: 21
+      selector:
+        number:
+          min: 0
+          max: 23
+          mode: box
+    till_hour:
+      name: Till hour
+      description: Hour the quiet period ends, 0-23. May be earlier than the start to span midnight.
+      example: 7
+      selector:
+        number:
+          min: 0
+          max: 23
+          mode: box
+    recurring:
+      name: Recurring
+      description: Whether the window repeats every day.
+      default: true
+      selector:
+        boolean:
+
+read_dnd_schedule:
+  name: Read DND schedule
+  description: >-
+    Read the Do Not Disturb window currently stored on the clock and write it
+    to the Home Assistant log.
+
+set_leds:
+  name: Set LEDs
+  description: >-
+    Light areas of the clock's four LED rings. Each ring has 48 pixels; pixel 0 is at
+    twelve o'clock and numbering runs clockwise. Ring 0 is the outermost.
+  fields:
+    segments:
+      name: Segments
+      description: >-
+        List of areas to light. Each needs 'start' (0-47) and 'color' (a colour name),
+        and may set 'length' (pixels, default 1), 'ring' (0-3, default 0) and
+        'rings_tall' (default 1).
+      required: true
+      example: |-
+        - start: 0
+          length: 12
+          ring: 0
+          color: red
+        - start: 24
+          length: 6
+          ring: 1
+          color: sky_blue
+      selector:
+        object:
+    mode:
+      name: Display mode
+      description: >-
+        How the scene shares the display. 'watchface' shows it together with the digital
+        time, 'exclusive' hides the digital clockface, 'ring_and_text' alternates with it.
+      default: watchface
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - watchface
+            - exclusive
+            - ring_and_text
+    slot:
+      name: Scene slot
+      description: Which scene slot to store this in. Reusing a slot replaces its contents.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 7
+          mode: box
+    life_time:
+      name: Lifetime
+      description: >-
+        Frames at 50 FPS before the scene stops animating. A fill stays on screen
+        afterwards, so this is not how long it is visible.
+      default: 50
+      selector:
+        number:
+          min: 1
+          max: 3000
+          mode: box
+
+clear_leds:
+  name: Clear LEDs
+  description: Remove a scene previously sent with Set LEDs.
+  fields:
+    slot:
+      name: Scene slot
+      description: The slot to clear.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 7
+          mode: box
+
+set_animation:
+  name: Set animation
+  description: >-
+    Run one of the animations built into the clock's firmware on the LED rings. They
+    are single-colour patterns tinted by the colour you pick.
+  fields:
+    animation:
+      name: Animation
+      description: >-
+        'sweep' fills the area from its start pixel, pauses and repeats; its speed sign
+        sets the direction. The rest are firmware effects.
+      default: fire
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - sweep
+            - fire
+            - wheel
+            - flower
+            - flower2
+            - fan
+            - sun
+            - thunderstorm
+            - cloud
+    color:
+      name: Colour
+      description: Colour name from the clock's palette. Black renders nothing.
+      default: white
+      selector:
+        text:
+    speed:
+      name: Speed
+      description: >-
+        0-10 for the firmware animations. 'sweep' takes -10 to 10, where a negative
+        value runs anticlockwise.
+      default: 3
+      selector:
+        number:
+          min: -10
+          max: 10
+          mode: slider
+    start:
+      name: Start pixel
+      description: 0-47, clockwise from twelve o'clock.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 47
+          mode: box
+    length:
+      name: Length
+      description: >-
+        Pixels to cover. The firmware animations only render multiples of 8 and round
+        anything else down.
+      default: 48
+      selector:
+        number:
+          min: 1
+          max: 48
+          mode: box
+    ring:
+      name: Ring
+      description: 0-3, counted from the outer edge.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 3
+          mode: box
+    rings_tall:
+      name: Rings tall
+      description: How many rings the animation covers.
+      default: 4
+      selector:
+        number:
+          min: 1
+          max: 4
+          mode: box
+    mode:
+      name: Display mode
+      default: watchface
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - watchface
+            - exclusive
+            - ring_and_text
+    slot:
+      name: Scene slot
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 7
+          mode: box
+    life_time:
+      name: Lifetime
+      description: Frames at 50 FPS that the animation runs for.
+      default: 2500
+      selector:
+        number:
+          min: 1
+          max: 30000
+          mode: box
+
+set_scene:
+  name: Set scene
+  description: >-
+    Send a timed sequence of fills that the clock plays itself at 50 frames per second.
+    This is how to animate: one call uploads the whole timeline, and the clock runs it
+    at its own frame rate. Sending fills one at a time cannot animate -- every call is a
+    Bluetooth round trip, so the timing is whatever the radio happened to do.
+  fields:
+    steps:
+      name: Steps
+      description: >-
+        List of steps. Every step takes 'frames' or 'seconds' for how long it runs, and
+        optionally 'at' to place it on the timeline; without 'at' a step follows on from
+        the previous one. A step's 'type' is one of: 'fill' (default, takes 'segments'),
+        'effect' (pulse, wave or light_flash, layered onto areas already drawn in this
+        scene), 'text', 'sound', or 'weather' (snow, rain or fog as a particle effect).
+        Anything drawn stays on screen after its step ends, so paint black over what
+        should disappear.
+      required: true
+      example: |-
+        - seconds: 0.5
+          segments:
+            - { start: 0, length: 6, ring: 0, rings_tall: 4, color: red }
+        - seconds: 0.5
+          segments:
+            - { start: 0, length: 6, ring: 0, rings_tall: 4, color: black }
+            - { start: 6, length: 6, ring: 0, rings_tall: 4, color: red }
+      selector:
+        object:
+    default_frames:
+      name: Default frames
+      description: How long a step runs when it gives neither frames nor seconds.
+      default: 25
+      selector:
+        number:
+          min: 1
+          max: 3000
+          mode: box
+    mode:
+      name: Display mode
+      default: watchface
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - watchface
+            - exclusive
+            - ring_and_text
+    slot:
+      name: Scene slot
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 7
+          mode: box

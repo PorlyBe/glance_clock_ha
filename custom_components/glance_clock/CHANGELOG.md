@@ -21,10 +21,37 @@ All notable changes to this project will be documented in this file.
   system setting. The values needed no change: Home Assistant converts them before this
   integration sees them, so converting again would double-convert.
 
+- **A notice with an unknown colour name did nothing at all.** The name was swallowed
+  before anything reached the clock, and the service call reported success. Unknown
+  colours, sounds and animations now fail with the list of accepted names.
+- **A timer without `intervals` displayed nothing.** `countdown` is a lead-in delay, not
+  the count, so a timer given only a countdown ran an empty timeline. It is now refused
+  with an explanation.
+- **Non-ASCII text was mangled** on its way to the clock.
+- **Buttons stayed greyed out after a reconnect.** They do not poll, so availability was
+  only re-evaluated when something else happened to write their state.
+
 ### Added
 - `set_dnd_schedule` and `read_dnd_schedule`, plus **DND Start** and **DND End** number
   entities. The schedule lives on the clock and keeps working while Home Assistant is
   down, which is what made losing it to a settings write worth fixing first.
+- **Direct control of the LED rings.** `set_leds` and `clear_leds` draw and remove
+  coloured segments; `set_animation` runs the firmware's own patterns; `set_scene` reaches
+  the rest of the scene object -- timelines, the three effects, weather particles, text
+  and sounds. The ring geometry is 4 rings of 48 pixels with pixel 0 at twelve o'clock,
+  so one hour is exactly 4 pixels.
+- **Device page controls** for all of it: an animation, colour and effect picker with Run
+  and Stop buttons, a slot slider, a sound audition button, a **Clear All Scenes** button,
+  a Mute switch, and the two hand-calibration buttons.
+- **A notify entity**, `notify.<clock>`, so the clock works with `notify.send_message`
+  like any modern notification target. Sound, animation, effect, colour and priority ride
+  along in the message as `[sound:bells]` markers rather than taking over `title`.
+
+### Changed
+- **Scenes appear the moment they are sent.** Every scene write is now followed by a
+  playback start, which also means a new scene replaces one already in the slot instead of
+  waiting for the engine's next pass. Filmed on hardware: the wait was about fifteen
+  seconds before, and is gone.
 
 ### Documentation
 - `send_forecast` writes to scene slot 1, and a scene stays in its slot and replays until

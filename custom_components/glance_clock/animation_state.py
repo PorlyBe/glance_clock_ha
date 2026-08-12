@@ -21,6 +21,10 @@ DEFAULTS = {
     "color": "white",
     "speed": 3,
     "sound": "bells",
+    # Slot 0 by default, which is where the animation buttons have always
+    # written. Slot 1 belongs to send_forecast, so anyone putting a second
+    # animation somewhere should reach for 2 and up.
+    "slot": 0,
 }
 
 

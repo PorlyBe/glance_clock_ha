@@ -33,6 +33,8 @@ async def async_setup_entry(
             GlanceClockDndEndNumber(config_entry, mac_address, name, connection_manager),
             GlanceClockAnimationSpeedNumber(
                 config_entry, mac_address, name, connection_manager),
+            GlanceClockAnimationSlotNumber(
+                config_entry, mac_address, name, connection_manager),
         ]
     )
 
@@ -191,6 +193,62 @@ class GlanceClockAnimationSpeedNumber(GlanceClockEntity, NumberEntity, RestoreEn
         if last is not None:
             try:
                 get_animation_state(self.hass, self._config_entry.entry_id)["speed"] = int(
+                    float(last.state)
+                )
+                self.async_write_ha_state()
+            except (TypeError, ValueError):
+                pass
+
+
+class GlanceClockAnimationSlotNumber(GlanceClockEntity, NumberEntity, RestoreEntity):
+    """Which scene slot the Animation Run button writes to.
+
+    The buttons used to be fixed to slot 0, which meant a second animation
+    replaced the first and there was no way to put one somewhere else without
+    dropping into YAML. With this the device page can fill several slots, and
+    Animation Stop clears whichever one is selected.
+
+    Slot 1 belongs to send_forecast, so a forecast and an animation parked
+    there will overwrite each other -- whichever arrives second wins.
+    """
+
+    # A slider rather than a box: eight steps is short enough to drag across
+    # without overshooting, and picking a slot is a choice among a few rather
+    # than a value being typed.
+    _attr_native_min_value = 0
+    _attr_native_max_value = 7
+    _attr_native_step = 1
+    _attr_mode = NumberMode.SLIDER
+
+    def __init__(self, config_entry, mac_address, device_name, connection_manager):
+        """Initialize the animation slot number."""
+        super().__init__(config_entry, mac_address, device_name, connection_manager)
+        self._attr_name = f"{device_name} Animation Slot"
+        self._attr_unique_id = f"{mac_address}_animation_slot"
+        self._attr_icon = "mdi:layers-outline"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the chosen slot."""
+        return float(get_animation_state(self.hass, self._config_entry.entry_id)["slot"])
+
+    @property
+    def available(self) -> bool:
+        """Always available; nothing is read from the clock."""
+        return True
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Remember the slot for the next run."""
+        get_animation_state(self.hass, self._config_entry.entry_id)["slot"] = int(value)
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the previous slot."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is not None:
+            try:
+                get_animation_state(self.hass, self._config_entry.entry_id)["slot"] = int(
                     float(last.state)
                 )
                 self.async_write_ha_state()

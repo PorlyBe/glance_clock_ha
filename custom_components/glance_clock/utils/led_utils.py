@@ -19,6 +19,7 @@ clockwise, ring 0 is the outermost, and all four fields render as described.
 from __future__ import annotations
 
 from ..const import COLORS
+from .enums import lookup_enum
 
 RING_COUNT = 4
 PIXELS_PER_RING = 48
@@ -197,16 +198,9 @@ TEXT_SCROLL = {"none": 0, "repeat": 1, "rapid": 2, "delay": 3}
 STEP_TYPES = ("fill", "effect", "text", "sound", "weather")
 
 
-def _lookup(table: dict, value, what: str) -> int:
-    """Resolve a name from one of the enum tables, or pass an index through."""
-    if isinstance(value, str):
-        key = value.strip().lower()
-        if key not in table:
-            raise ValueError(
-                f"unknown {what} '{value}'; expected one of {', '.join(sorted(table))}"
-            )
-        return table[key]
-    return int(value)
+#: Kept as a module-level name because the scene builder below reads better
+#: with the short form. The implementation is shared with the notice path.
+_lookup = lookup_enum
 
 
 def scene_steps_from_config(

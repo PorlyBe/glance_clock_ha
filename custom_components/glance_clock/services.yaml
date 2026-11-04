@@ -261,3 +261,105 @@ send_forecast:
       description: "Optional display template data (advanced users). If not provided, uses default thermometer icon + value + °C"
       selector:
         text:
+
+show_calendar:
+  name: 'Apps: show calendar wedges'
+  description: Fetch the next 12 hours from selected HA calendars. Refresh every five
+    minutes with an automation. Empty calendars clears the base.
+  fields:
+    entry_id: &id001
+      name: Clock config entry ID
+      selector:
+        text: {}
+      description: Optional for one clock; required when several clocks are configured.
+    calendars:
+      name: Calendars and colors
+      selector:
+        object: {}
+      required: true
+      example:
+        calendar.personal: blue
+        calendar.family: blue_violet
+announce_calendar:
+  name: 'Apps: announce a meeting'
+  description: Rotate through visible events. Start scrolling and the selected wedge
+    cue together.
+  fields:
+    entry_id: *id001
+    duration: &id002
+      name: Display seconds
+      selector:
+        number:
+          min: 3
+          max: 30
+          mode: box
+      default: 12
+    sound: &id003
+      name: Sound
+      selector:
+        select:
+          options:
+          - none
+          - rise
+          - bells
+          - radar
+          - popcorn
+      default: none
+    effect:
+      name: Announcement type
+      selector:
+        select:
+          options:
+          - label: Text only
+            value: none
+          - label: Breathing (while scrolling)
+            value: breathing
+          - label: Breath 1
+            value: breath_1
+          - label: Breath 2
+            value: breath_2
+          - label: One brief pixel pulse
+            value: dim_once
+          - label: Two brief pixel pulses
+            value: dim_twice
+      default: breathing
+announce:
+  name: 'Apps: announce'
+  description: Queue a short announcement and restore the calendar afterward. Use
+    for meeting alerts and other apps.
+  fields:
+    entry_id: *id001
+    duration: *id002
+    sound: *id003
+    text:
+      name: Text
+      selector:
+        text: {}
+      required: true
+    effect:
+      name: Animation
+      selector:
+        select:
+          options:
+          - none
+          - glow
+          - wave
+      default: glow
+    primary_color:
+      name: Primary color
+      selector:
+        number:
+          min: 1
+          max: 53
+          mode: box
+      description: Clock palette ID; see docs/APPS.md.
+      default: 15
+    secondary_color:
+      name: Secondary color
+      selector:
+        number:
+          min: 1
+          max: 53
+          mode: box
+      description: Clock palette ID; see docs/APPS.md.
+      default: 12

@@ -1,12 +1,17 @@
 """Initialize the Glance Clock integration."""
 import logging
+from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import Platform
+from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .bluetooth import GlanceClockConnectionManager, create_passive_coordinator
 from .services import async_register_services, async_unregister_services
+from .apps.controller import AppController
+from .apps.services import async_register_app_services, async_unregister_app_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,6 +71,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register integration services
     await async_register_services(hass, entry)
 
+    apps = AppController(connection_manager, dt_util.now,
+                         lambda coro: hass.async_create_background_task(coro, "Glance app announcements"))
+    hass.data[DOMAIN][entry.entry_id]["apps"] = apps
+    connection_manager.add_connection_callback(apps.refresh)
+    entry.async_on_unload(lambda: connection_manager.remove_connection_callback(apps.refresh))
+    entry.async_on_unload(async_track_time_interval(hass, apps.refresh, timedelta(minutes=1)))
+    async_register_app_services(hass)
+
     _LOGGER.info(f"Glance Clock integration setup complete for {name}")
     return True
 
@@ -80,8 +93,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     Returns:
         True if unload was successful
     """
-    # Stop the connection manager
+    # Keep resources alive if a platform refuses to unload.
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if not unload_ok:
+        return False
+
     entry_data = hass.data[DOMAIN].get(entry.entry_id, {})
+    if apps := entry_data.get("apps"):
+        await apps.close()
     connection_manager = entry_data.get("connection_manager")
 
     if connection_manager:
@@ -89,14 +108,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             f"Stopping connection manager for {entry_data.get('name')}")
         await connection_manager.stop_connection()
 
-    # Unload all platforms
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-
     # Clean up stored data
     hass.data[DOMAIN].pop(entry.entry_id, None)
 
     # Unregister services if this is the last entry
     await async_unregister_services(hass)
+    if not hass.data[DOMAIN]:
+        async_unregister_app_services(hass)
 
     _LOGGER.info(
         f"Glance Clock integration unloaded for {entry_data.get('name')}")

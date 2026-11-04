@@ -32,6 +32,7 @@ class GlanceClockConnectionManager:
         self._connection_callbacks = []
         self._cached_settings = None
         self._settings_read_time = None
+        self._write_lock = asyncio.Lock()
 
     # Callback Management
 
@@ -266,27 +267,16 @@ class GlanceClockConnectionManager:
     # Command Interface
 
     async def send_command(self, command_data: bytes) -> bool:
-        """Send a command to the device using the active connection.
-
-        Automatically attempts to connect if not currently connected.
-
-        Args:
-            command_data: Raw bytes to send to the device
-
-        Returns:
-            True if command was sent successfully, False otherwise
-        """
-        # Ensure we have an active connection
-        if not self.client or not self.client.is_connected:
-            _LOGGER.debug(
-                f"No active connection to {self.name}, attempting to connect")
+        """Connect before taking the write lock; callbacks may send commands."""
+        if not self.is_connected:
             await self._connect()
-
-            if not self.client or not self.client.is_connected:
-                _LOGGER.error(
-                    f"Failed to establish connection for command to {self.name}")
+        async with self._write_lock:
+            if not self.is_connected:
                 return False
+            return await self._send_command(command_data)
 
+    async def _send_command(self, command_data: bytes) -> bool:
+        """Write one command while holding the transport lock."""
         try:
             # Try write with response first (more reliable)
             try:

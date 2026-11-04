@@ -264,14 +264,13 @@ class GlanceClockNotificationService(BaseNotificationService):
 
                 _LOGGER.debug("Reading settings characteristic...")
 
-                await client.connect()
-
                 raw_data = await asyncio.wait_for(client.read_gatt_char(char), timeout=10)
 
                 _LOGGER.debug(f"Read value: {raw_data}")
 
             except (CharacteristicMissingError, KeyError, Exception) as ex:
                 _LOGGER.error(f"Characteristic exploration failed: {ex}")
+                return None
 
             if len(raw_data) > 0:
                 # Check if this is descriptor data starting with "Data" (0x44617461)

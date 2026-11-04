@@ -60,7 +60,7 @@ async def async_register_services(hass: HomeAssistant, entry: ConfigEntry):
 async def async_unregister_services(hass: HomeAssistant):
     """Unregister all services for the integration."""
     # Only unregister if this is the last config entry
-    if len(hass.data.get(DOMAIN, {})) <= 1:
+    if not hass.data.get(DOMAIN):
         hass.services.async_remove(DOMAIN, "update_display_settings")
         hass.services.async_remove(DOMAIN, "read_current_settings")
         hass.services.async_remove(DOMAIN, "refresh_entities")

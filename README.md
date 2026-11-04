@@ -1,3 +1,4 @@
+
 # Glance Clock Integration for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
@@ -309,3 +310,7 @@ This integration uses protocol and implementation insights from [Hypfer's Glance
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Calendar wedges and reminders
+
+Display the next twelve hours from Home Assistant calendar entities, including Google Calendar, with per-calendar colors, shared overlap bands and scrolling reminders. See [calendar setup and automation examples](docs/APPS.md).

@@ -1,0 +1,47 @@
+blueprint:
+  name: Glance Clock — scheduled calendar reminders
+  description: Run a clock announcement at a chosen interval or at listed local times. Use the announce a meeting action to rotate through the visible events.
+  domain: automation
+  input:
+    schedule:
+      name: Schedule
+      default: interval
+      selector:
+        select:
+          options:
+            - interval
+            - times
+    interval:
+      name: Interval in minutes
+      description: Aligned to midnight; used for interval schedules.
+      default: 60
+      selector:
+        number:
+          min: 1
+          max: 1440
+          mode: box
+    times:
+      name: Times of day
+      description: Comma-separated 24-hour times, for example 08:00, 12:30, 18:00.
+      default: '08:00, 18:00'
+      selector:
+        text:
+    announcement:
+      name: Announcement action
+      description: Choose Glance Clock Apps announce a meeting or a custom reminder announcement.
+      selector:
+        action:
+variables:
+  schedule: !input schedule
+  interval: !input interval
+  times: !input times
+triggers:
+  - trigger: time_pattern
+    minutes: '*'
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (schedule == 'interval' and ((now().hour * 60 + now().minute) % (interval | int)) == 0)
+         or (schedule == 'times' and now().strftime('%H:%M') in times.replace(' ', '').split(',')) }}
+actions: !input announcement
+mode: single

@@ -1,0 +1,27 @@
+blueprint:
+  name: Glance Clock — calendar wedges
+  description: Refresh the next 12 hours every five minutes and after HA starts. Set a color per calendar.
+  domain: automation
+  input:
+    calendars:
+      name: Calendars and colors
+      description: 'Mapping such as {calendar.personal: blue, calendar.family: blue_violet}. Empty mapping clears the calendar.'
+      default: {}
+      selector:
+        object:
+    entry_id:
+      name: Clock config entry ID
+      description: Copy the Glance integration entry ID. See docs/APPS.md.
+      selector:
+        text:
+triggers:
+  - trigger: homeassistant
+    event: start
+  - trigger: time_pattern
+    minutes: /5
+actions:
+  - action: glance_clock.show_calendar
+    data:
+      entry_id: !input entry_id
+      calendars: !input calendars
+mode: single
